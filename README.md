@@ -36,6 +36,17 @@ Offline is működik: töltsd le a [`demo/camera-stack-demo.html`](demo/camera-s
 fájlt, és nyisd meg duplakattintással. A demó a felület kódjából készül
 (`python tools/build_demo.py`), a CI pedig ellenőrzi, hogy naprakész-e.
 
+## Saját telepítés
+
+![Saját telepítés: Raspberry Pi 4 a kamerával, MediaMTX, Camera Stack, Tailscale, ntfy, OpenRouter, Synology Surveillance Station, Hetzner és Cloudflare](docs/images/setup.svg)
+
+Minden a **Raspberry Pi 4**-en fut. A Pi NoIR kamera képét a host kódolja H.264-be,
+a Dockerben futó MediaMTX pedig RTSP-n továbbadja a Camera Stacknek és a
+**Synology Surveillance Station**-nek, amely a NAS-on folyamatosan rögzít.
+Értesítést az **ntfy** küld, a person-klipeket az **OpenRouter** elemzi. A mentés
+SFTP-n megy a **Hetznerre** és a **Cloudflare**-re. A webes felület és az
+élőkép **Tailscale**-en keresztül érhető el bárhonnan, nyitott port nélkül.
+
 ## Gyors indítás
 
 Docker Desktop Macen, vagy Docker Engine + Compose plugin Linuxon szükséges.
