@@ -1,0 +1,12 @@
+# Optional larger image for PyTorch/CUDA development; default Docker builds use NCNN.
+services:
+  publisher:
+    profiles: [test-source]
+    image: camera-stack:pytorch
+  camera:
+    image: camera-stack:pytorch
+    build:
+      target: runtime
+    environment:
+      AI_BACKEND: ultralytics
+      AI_MODEL: ${AI_MODEL:-/opt/models/yolo11n.pt}

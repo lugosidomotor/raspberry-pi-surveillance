@@ -1,0 +1,14 @@
+[Unit]
+Description=Camera Stack host CSI adapter (FFmpeg managed by Compose)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/camera-stack
+ExecStart=/usr/bin/python3 %h/camera-stack/deploy/pi/source.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=35
+
+[Install]
+WantedBy=default.target

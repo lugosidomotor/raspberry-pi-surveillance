@@ -1,0 +1,11 @@
+# Raspberry Pi 4 only: H.264 hardware decoding of the camera stream (bcm2835-codec, /dev/video10).
+# Add after docker-compose.pi.yml in COMPOSE_FILE. Only the decoder node is shared, no privileged mode;
+# the app falls back to software decoding if the decoder cannot be opened. Pi 5 has no H.264 decoder.
+services:
+  camera:
+    devices:
+      - /dev/video10:/dev/video10
+    group_add:
+      - "44"  # host 'video' group that owns /dev/video10
+    environment:
+      CAMERA_DECODER: ${CAMERA_DECODER:-h264_v4l2m2m}

@@ -1,0 +1,58 @@
+# Local backup of the Pi's host configuration (.env with API keys, boot config, installed units,
+# package inventory; see pi-config/README.md). Never commit it.
+/pi-config/
+
+# Early UI prototypes; their sample images are frames of third-party footage. The published
+# demo is demo/camera-stack-demo.html.
+/POC/
+
+# Secrets (only the blank template belongs in Git)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+rclone.conf
+id_rsa*
+id_ed25519*
+
+# Runtime data: camera footage, logs, database and backup credentials
+/data/**
+!/data/.gitkeep
+/events/
+/recordings/
+/logs/
+*.sqlite*
+*.db
+*.mp4
+*.mkv
+*.mov
+*.avi
+
+# Models are bundled by Docker, not committed
+*.pt
+*.onnx
+*.tflite
+*_ncnn_model/
+
+# Development and generated artifacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+*.egg-info/
+build/
+dist/
+.DS_Store
+.idea/
+.vscode/
+.impeccable/
+.playwright-mcp/
+*.tar
+*.tar.gz
+*.zip

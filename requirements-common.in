@@ -1,0 +1,8 @@
+# Direct runtime dependencies, pinned to the verified Docker environment.
+opencv-python-headless==4.14.0.94
+numpy==2.4.6
+PyYAML==6.0.3
+requests==2.34.2
+fastapi==0.142.2
+uvicorn==0.54.0
+python-dotenv==1.2.4

@@ -1,0 +1,14 @@
+# Compose override for the bundled 320x320 NCNN model.
+services:
+  camera:
+    image: camera-stack:ncnn
+    build:
+      target: ncnn
+    environment:
+      AI_BACKEND: ncnn
+      AI_MODEL: /opt/models/yolo11n_ncnn_model
+      AI_DEVICE: cpu
+      AI_IMAGE_SIZE: "320"
+  publisher:
+    profiles: [test-source]
+    image: camera-stack:ncnn

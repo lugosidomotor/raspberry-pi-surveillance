@@ -1,0 +1,43 @@
+# defaults < this YAML < environment. Optional integrations use env-only credentials/switches.
+motion:
+  enabled: true
+  max_fps: 8
+  resize_width: 640
+  min_area: 3000
+  threshold: 25
+  required_frames: 3
+  warmup_frames: 30
+  cooldown_seconds: 10
+  crop_padding: 0.35
+ai:
+  enabled: true
+  backend: ultralytics
+  model: yolo11n.pt
+  device: auto
+  image_size: 320
+  confidence: 0.75
+  tracked_objects: [person]
+  max_fps: 3
+  crop_motion: true
+validation:
+  window_frames: 3
+  positive_frames: 2
+  max_gap_seconds: 5
+events:
+  cooldown_seconds: 30
+logging:
+  level: INFO
+  stats_interval_seconds: 30
+zones: []
+# Coordinates normalized to 0..1; bottom-center of object box selects zone.
+# First matching class rule wins. Configured zones ignore objects outside all rules.
+# zones:
+#   - name: sidewalk
+#     rectangle: [0, 0, 1, 0.25]
+#     rules: {person: ignore}
+#   - name: entrance
+#     rectangle: [0, 0.25, 0.5, 1]
+#     rules: {person: event}
+#   - name: driveway
+#     rectangle: [0.5, 0.25, 1, 1]
+#     rules: {car: event, person: event}

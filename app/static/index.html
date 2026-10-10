@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera Stack · Megfigyelés</title>
+  <link rel="icon" href="/static/camera.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <!-- THESIS: Preserve the existing monitoring surface; add real daily event navigation.
+       OWN-WORLD: Existing light slate, teal accents, system type, compact outlined panels.
+       STORY: Read today's event density; focus or hover a marker, open its latest snapshot.
+       FIRST VIEWPORT: Unchanged viewer and status rail; the timeline joins directly below the viewer.
+       FORM: Targeted extension of the approved incumbent, no new visual identity.
+       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance -->
+  <svg class="icon-definitions" aria-hidden="true" width="0" height="0">
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.75 4.75 0 0 0 7 18.5Z"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></symbol>
+    <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></symbol>
+    <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 14h18M7 16.5h.01M10 16.5h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-4.5 4.5L12 4l4.5 4.5M5 15v5h14v-5"/></symbol>
+  </svg>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Camera Stack főoldal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>Camera Stack</a>
+    <nav aria-label="Fő navigáció"><a href="/" id="nav-live"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>Élőkép</a><a href="/events" id="nav-events"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8m-8 4h5"/></svg>Események</a></nav>
+    <span class="connection" id="connection">Kapcsolódás…</span>
+  </header>
+  <main>
+    <div id="error" role="alert" hidden></div>
+    <div id="test-stream-banner" class="test-stream-banner" role="status" hidden><strong>TESZT STREAM</strong><span>Előre rögzített videó · végtelenített lejátszás · nem élő kamerakép</span></div>
+    <section id="live-view">
+      <div class="page-heading"><div><h1>Kamerafigyelés</h1><p>Élőkép és a megfigyelőrendszer állapota.</p></div><a class="button" href="/events">Események megnyitása <span aria-hidden="true">→</span></a></div>
+      <div class="workstation">
+        <div class="viewer-column">
+        <div class="viewer"><div class="viewer-bar"><span>Élő kamera</span><span class="viewer-actions"><span id="live-label">Nincs webes stream</span><button id="rotate" type="button" class="rotate-button" title="Kép forgatása 90°-kal (élőkép és felismerés)">↻ 0°</button></span></div>
+          <div class="video-surface" id="video-surface">
+            <div id="stream-empty"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="6" y="12" width="26" height="24" rx="3"/><path d="m32 20 10-6v20l-10-6"/></svg><h2>Az élőkép nem elérhető</h2><p>Az élőképhez adj meg egy MediaMTX lejátszócímet a <code>LIVE_STREAM_URL</code> változóban.</p><p class="hint">Az eseményészlelés ettől függetlenül működik.</p></div>
+          </div>
+          <div class="viewer-footer"><span id="motion-status">Mozgás: várakozás</span><span id="last-detection">AI: várakozás</span></div>
+        </div>
+        <section class="timeline" aria-labelledby="timeline-heading">
+          <div class="timeline-heading"><div><h2 id="timeline-heading">Ma</h2><p id="timeline-summary" role="status">Idővonal betöltése…</p></div><div class="timeline-legend"><span><i class="density-key" aria-hidden="true"></i>Események / 15 perc</span><span><i class="event-key" aria-hidden="true"></i>Legutóbbi találat</span></div></div>
+          <div class="timeline-track"><div id="timeline-bins" class="timeline-bins" aria-hidden="true"></div><div id="timeline-ticks" class="timeline-ticks"></div><div id="timeline-now" class="timeline-now" aria-hidden="true"><span>most</span></div><div id="timeline-axis" class="timeline-axis" aria-hidden="true"></div></div>
+          <p class="timeline-empty" id="timeline-empty" hidden>Ma még nincs validált esemény.</p>
+          <details id="timeline-browse" class="timeline-browse" hidden><summary id="timeline-browse-label">Találatok böngészése</summary><ol id="timeline-links"></ol></details>
+          <div id="timeline-tooltip" class="timeline-tooltip" role="tooltip" hidden><img id="timeline-image" alt="" width="200" height="112"><strong id="timeline-label"></strong><span id="timeline-time"></span></div>
+        </section>
+        </div>
+        <aside class="state-rail" aria-label="Rendszerállapot"><section class="rail-group"><h2>Rendszerállapot</h2>
+          <dl><div><dt>Kamera</dt><dd id="camera-state">—</dd></div><div><dt>AI / eszköz</dt><dd id="device">—</dd></div><div><dt>CPU / rendszer</dt><dd id="cpu">—</dd></div><div><dt>AI inference</dt><dd id="inference">—</dd></div><div><dt>Kamera / motion FPS</dt><dd id="fps">—</dd></div><div><dt>AI FPS</dt><dd id="ai-fps">—</dd></div><div><dt>Feldolgozási idő</dt><dd id="latency">—</dd></div></dl>
+          </section><section class="rail-group"><h2>Integrációk</h2><dl><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-bell"/></svg>Értesítések</dt><dd id="notifications">—</dd></div><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-cloud"/></svg>Cloud backup</dt><dd id="backup">—</dd></div><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-upload"/></svg>Feltöltés</dt><dd id="upload">—</dd></div><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-film"/></svg>Eseményklip</dt><dd id="recording">—</dd></div><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-rec"/></svg>24/7 rögzítés</dt><dd id="continuous">—</dd></div><div><dt>Videóelemzés</dt><dd id="activity-analysis">—</dd></div></dl></section>
+          <section class="rail-group latest"><h2>Utolsó esemény</h2><p id="latest-event">Még nem történt validált esemény.</p></section>
+          <section class="rail-group"><h2>Tárhely</h2><dl><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-clock"/></svg>Megőrzési idő</dt><dd id="retention">—</dd></div><div><dt><svg class="function-icon" aria-hidden="true"><use href="#i-disk"/></svg>Mentés állapota</dt><dd id="storage-status">—</dd></div></dl></section>
+          <section class="rail-group" aria-labelledby="watchdog-heading"><h2 id="watchdog-heading">Automatikus helyreállítás</h2><dl><div><dt>Állapot</dt><dd id="wd-state">—</dd></div><div><dt>GPU-firmware</dt><dd id="wd-firmware">—</dd></div><div><dt>Kamerakép</dt><dd id="wd-camera">—</dd></div><div><dt>Utolsó ellenőrzés</dt><dd id="wd-checked">—</dd></div><div><dt>Utolsó beavatkozás</dt><dd id="wd-action">—</dd></div><div><dt>Újraindítás (24 óra)</dt><dd id="wd-reboots">—</dd></div></dl><p id="wd-message" class="wd-message"></p><button id="wd-toggle" type="button" class="wd-toggle" aria-pressed="true">Automatikus újraindítás: be</button></section>
+        </aside>
+      </div>
+    </section>
+    <section id="hardware-panel" class="hardware-section" aria-labelledby="hardware-heading" hidden>
+      <div class="hardware-heading"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/></svg><h2 id="hardware-heading">Raspberry Pi hardver</h2><span id="hardware-model">—</span></div>
+      <p id="hardware-warning" class="hardware-warning" role="status" hidden></p>
+      <dl class="hardware-readings">
+        <div><dt>Hőmérséklet</dt><dd id="hw-temperature">—</dd><div class="hardware-bar" aria-hidden="true"><span id="hw-temperature-bar"></span></div><span class="hardware-detail" id="hw-temperature-detail">—</span></div>
+        <div><dt>CPU</dt><dd id="hw-cpu">—</dd><div class="hardware-bar" aria-hidden="true"><span id="hw-cpu-bar"></span></div><span class="hardware-detail"><span id="hw-cores">—</span> · <span id="hw-frequency">—</span></span></div>
+        <div><dt>Memória</dt><dd id="hw-memory">—</dd><div class="hardware-bar" aria-hidden="true"><span id="hw-memory-bar"></span></div><span class="hardware-detail" id="hw-memory-detail">—</span></div>
+        <div><dt>Szabad tárhely</dt><dd id="hw-disk">—</dd><div class="hardware-bar" aria-hidden="true"><span id="hw-disk-bar"></span></div><span class="hardware-detail" id="hw-disk-detail">—</span></div>
+      </dl>
+      <div class="hardware-footer"><span>Terhelés <span class="hardware-footer-label">1 / 5 / 15 p</span> <strong id="hw-load">—</strong></span><span>Üzemidő <strong id="hw-uptime">—</strong></span></div>
+    </section>
+    <section class="event-section" aria-labelledby="events-heading">
+      <div class="section-heading"><div><h1 id="events-heading">Legutóbbi események</h1><p>Csak több képkockával megerősített találatok.</p></div>
+        <div class="controls"><label for="filter">Objektum</label><select id="filter"><option value="">Összes</option></select><button id="refresh" type="button">Frissítés</button></div>
+      </div>
+      <div id="events-list" class="event-list" aria-live="polite"><p class="empty">Események betöltése…</p></div>
+      <div class="pagination" id="pagination"><button id="previous" disabled>Előző</button><span id="page-number">1. oldal</span><button id="next" disabled>Következő</button></div>
+    </section>
+    <footer class="footer"><span>Motion → AI → validáció → esemény</span><span id="updated">Frissítés…</span></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+name: camera-stack
+
+services:
+  camera:
+    image: camera-stack:local
+    build:
+      context: .
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      AI_MODEL: ${AI_MODEL:-/opt/models/yolo11n_ncnn_model}
+      RCLONE_CONFIG: ${RCLONE_CONFIG:-/data/rclone/rclone.conf}
+    volumes:
+      - ./data:/data
+      - ./config.yaml:/app/config.yaml:ro
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_HOST_PORT:-8000}:${WEB_PORT:-8000}"
+    stop_grace_period: 90s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

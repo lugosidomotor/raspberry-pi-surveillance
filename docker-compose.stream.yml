@@ -1,0 +1,50 @@
+# Optional local RTSP gateway, merged into the SAME camera-stack project.
+# Test video: COMPOSE_PROFILES=test-source. CSI: host camera-source adapter.
+services:
+  camera:
+    environment:
+      CAMERA_URL: rtsp://mediamtx:8554/cam
+      RECORDING_CAMERA_URL: ${RECORDING_CAMERA_URL:-rtsp://mediamtx:8554/cam}
+      CAMERA_RECONNECT_MAX_SECONDS: "2"
+    depends_on:
+      mediamtx:
+        condition: service_started
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.1
+    user: "65534:65534"
+    restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${WEBRTC_ADDITIONAL_HOSTS:-}
+    volumes:
+      - ./deploy/pi/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+  publisher:
+    profiles: [test-source]
+    image: camera-stack:local
+    init: true
+    restart: unless-stopped
+    command: [python, -m, app.publisher]
+    environment:
+      SOURCE_VIDEO: /data/test/source.mp4
+      SOURCE_RTSP_URL: rtsp://mediamtx:8554/cam
+    volumes:
+      - ./data:/data
+    depends_on:
+      mediamtx:
+        condition: service_started
+    stop_grace_period: 15s
+    healthcheck:
+      test: [CMD, python, -m, app.publisher, --health]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]

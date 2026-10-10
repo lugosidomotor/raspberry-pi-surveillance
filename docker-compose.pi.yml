@@ -1,0 +1,6 @@
+# Raspberry Pi only. Enables automatic model detection inside the non-root container.
+# The thermal and /proc host readings are already available; no privileged mode needed.
+services:
+  camera:
+    volumes:
+      - /sys/firmware/devicetree/base/model:/host/pi-model:ro

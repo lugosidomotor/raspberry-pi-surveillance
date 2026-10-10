@@ -1,0 +1,15 @@
+# System unit (root): firmware-hang / camera-down recovery for the camera stack.
+# Install: sed "s#@ROOT@#$HOME/camera-stack#" deploy/pi/camera-watchdog.service | sudo tee /etc/systemd/system/camera-watchdog.service
+[Unit]
+Description=Camera Stack recovery watchdog (firmware hang or camera down -> recover/reboot)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 @ROOT@/deploy/pi/watchdog.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

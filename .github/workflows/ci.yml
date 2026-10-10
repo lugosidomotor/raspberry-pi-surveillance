@@ -1,0 +1,47 @@
+name: Docker tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan public source for secrets
+        run: docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3 dir /repo --redact --no-banner
+      - name: Verify public configuration templates
+        run: |
+          test ! -f .env
+          test "$(git ls-files data | wc -l)" -eq 1
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.stream.yml -f docker-compose.ncnn.yml --profile test-source config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.stream.yml -f docker-compose.pytorch.yml --profile test-source config --quiet
+      - name: Demo page matches the UI
+        run: python3 tools/build_demo.py --check
+      - name: Build test image
+        run: docker build --target test -t camera-stack:test .
+      - name: Run camera-independent tests
+        run: docker run --rm --network none camera-stack:test
+      - name: Lint and formatting
+        run: |
+          docker run --rm --network none --entrypoint ruff camera-stack:test check app tests deploy tools
+          docker run --rm --network none --entrypoint ruff camera-stack:test format --check app tests deploy tools
+      - name: Build production image
+        run: docker build --target production -t camera-stack:ci .
+      - name: Verify non-root runtime
+        run: |
+          test "$(docker run --rm --entrypoint id camera-stack:ci -u)" != 0
+          docker run --rm --entrypoint python camera-stack:ci -m app.main --help
+      - name: Build and smoke-test NCNN backend
+        run: |
+          docker build --target ncnn -t camera-stack:ncnn .
+          docker run --rm --network none --entrypoint python camera-stack:ncnn -c 'import numpy as np; from app.config import load_config; from app.detector import create_detector; cfg=load_config("/app/config.yaml", {"CAMERA_URL":"rtsp://example/cam", "AI_BACKEND":"ncnn", "AI_MODEL":"/opt/models/yolo11n_ncnn_model"}); print(create_detector(cfg["ai"]).detect(np.zeros((360,640,3), dtype=np.uint8)))'
+          docker run --rm --entrypoint python camera-stack:ncnn -c 'import importlib.util; assert importlib.util.find_spec("torch") is None; assert importlib.util.find_spec("ultralytics") is None'

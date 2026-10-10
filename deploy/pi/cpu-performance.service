@@ -1,0 +1,14 @@
+# Fixed CPU clock: the ondemand governor asks the VideoCore firmware for a clock change several times a
+# minute; the firmware hang of 2026-10-10 happened inside such a request (dbs_work_handler). Pinning the
+# ARM clock removes those firmware transactions. Install: deploy/pi/install-host.sh
+[Unit]
+Description=Camera Stack: fixed CPU clock (performance governor)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo performance > "$g"; done'
+ExecStop=/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo ondemand > "$g"; done'
+
+[Install]
+WantedBy=multi-user.target

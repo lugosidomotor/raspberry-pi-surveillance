@@ -1,0 +1,17 @@
+# Host-network Pi/Linux source gateway. Do not expose these unauthenticated ports publicly.
+logLevel: info
+rtsp: true
+rtspAddress: :8554
+rtspTransports: [tcp]
+hls: true
+hlsAddress: :8888
+hlsAlwaysRemux: true
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+rtmp: false
+srt: false
+moq: false
+paths:
+  cam:
+    source: publisher
