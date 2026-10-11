@@ -398,7 +398,12 @@ tailscale serve status
 ### Élőkép
 
 Az alkalmazás nem konvertál RTSP-t böngészős streammé. `LIVE_STREAM_URL` egy
-MediaMTX HLS/WebRTC **playeroldal** URL-je, például `http://pi.local:8888/cam`.
+MediaMTX HLS/WebRTC **playeroldal** URL-je, például `http://0.0.0.0:8888/cam`. A
+`0.0.0.0` (vagy `{host}`) helyére a böngésző azt a címet írja, amelyen a felületet
+megnyitották.
+Így ugyanaz a beállítás működik a helyi wifin (`192.168.x.y`), Tailscale-en és
+névvel is. Egy fix Tailscale-IP-t a Tailscale nélküli eszközök (például egy
+tablet a közös wifin) nem érnek el.
 Nyers `.m3u8` vagy WHEP endpoint nem iframe player. A címet a böngészőnek kell
 elérnie; HTTPS UI alatt a player is legyen HTTPS, különben mixed-content hiba
 lehet. [MediaMTX dokumentáció](https://mediamtx.org/docs/usage/read-stream#web-browsers).

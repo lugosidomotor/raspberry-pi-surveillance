@@ -1532,6 +1532,17 @@ async function rotate() {
   catch { error("Nem sikerült elforgatni a képet. Próbáld újra."); }
   finally { $("rotate").disabled = false; }
 }
+// "{host}" or 0.0.0.0 in LIVE_STREAM_URL becomes the address this page was opened with (LAN IP, Tailscale IP
+// or a name). A browser cannot reach a server at 0.0.0.0, so that host can only mean "this same machine".
+function streamAddress(raw) {
+  if (!raw) return raw;
+  const url = raw.replaceAll("{host}", location.hostname);
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "0.0.0.0" && location.hostname) { parsed.hostname = location.hostname; return parsed.href; }
+  } catch { /* not a URL: leave it as configured */ }
+  return url;
+}
 function updateLive(s) {
   const online = s.camera === "connected", starting = s.camera === "connecting";
   if (typeof s.rotation === "number" && s.rotation !== rotation) applyRotation(s.rotation);
@@ -1551,8 +1562,9 @@ function updateLive(s) {
   // A player that lost its stream rarely recovers by itself: reload it when the camera comes back.
   if (online && wasOnline === false) { const player = $("frame").querySelector("iframe"); if (player) player.src = liveUrl; }
   wasOnline = online;
-  if (s.live_stream_url === liveUrl) return;
-  liveUrl = s.live_stream_url;
+  const streamUrl = streamAddress(s.live_stream_url);
+  if (streamUrl === liveUrl) return;
+  liveUrl = streamUrl;
   $("frame").querySelector("iframe")?.remove();
   $("stream-empty").hidden = Boolean(liveUrl);
   if (liveUrl) {

@@ -12,7 +12,7 @@ Az összefüggéseket az [architektúra-diagram](ARCHITECTURE.md) mutatja.
 ```dotenv
 COMPOSE_FILE=docker-compose.yml:docker-compose.pi.yml:docker-compose.stream.yml:docker-compose.ncnn.yml
 COMPOSE_PROFILES=test-source
-LIVE_STREAM_URL=http://<PI-IP>:8888/cam
+LIVE_STREAM_URL=http://0.0.0.0:8888/cam
 WEBRTC_ADDITIONAL_HOSTS=<PI-IP>
 APP_UID=1001
 APP_GID=1001
@@ -22,7 +22,8 @@ Az UID/GID értékeket az `id -u` és `id -g` alapján állítsd be. Az app
 `CAMERA_URL`-jét a stream override belső `rtsp://mediamtx:8554/cam` címre állítja.
 A felvétel ugyanazt olvassa, kivéve ha külön `RECORDING_CAMERA_URL`-t adsz meg.
 A böngészős `LIVE_STREAM_URL` mindig a kliens által elérhető hostcím legyen,
-nem a Docker belső `mediamtx` neve.
+nem a Docker belső `mediamtx` neve. A `0.0.0.0` (vagy `{host}`) hostot a böngésző arra a címre
+cseréli, amelyen a felületet megnyitották, így LAN-on és Tailscale-en is működik.
 
 ```bash
 docker compose up --build -d

@@ -39,6 +39,17 @@ def test_missing_camera_is_clear_even_if_yaml_contains_url(tmp_path):
         load_config(path, {})
 
 
+def test_live_stream_url_may_follow_the_address_the_browser_used(tmp_path):
+    base = {"CAMERA_URL": "rtsp://example/live", "DATA_DIR": str(tmp_path)}
+    cfg = load_config(tmp_path / "none", {**base, "LIVE_STREAM_URL": "http://{host}:8888/cam"})
+    assert cfg["web"]["live_stream_url"] == "http://{host}:8888/cam"  # the UI substitutes location.hostname
+    same_host = load_config(tmp_path / "none", {**base, "LIVE_STREAM_URL": "http://0.0.0.0:8888/cam"})
+    assert same_host["web"]["live_stream_url"] == "http://0.0.0.0:8888/cam"  # also "the UI's own address"
+    for bad in ("rtsp://{host}:8554/cam", "http://:8888/cam", "{host}:8888/cam"):
+        with pytest.raises(ConfigError, match="LIVE_STREAM_URL"):
+            load_config(tmp_path / "none", {**base, "LIVE_STREAM_URL": bad})
+
+
 def test_missing_optional_env_disables_integrations(cfg):
     assert cfg["ai"]["tracked_objects"] == ["person"]
     assert not cfg["notifications"]["enabled"]

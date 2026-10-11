@@ -246,9 +246,12 @@ def load_config(path: str | Path = "config.yaml", environ: dict | None = None) -
             activity["timeout_seconds"] = int(env["ACTIVITY_LLM_TIMEOUT_SECONDS"])
         except ValueError as exc:
             raise ConfigError("Invalid ACTIVITY_LLM_TIMEOUT_SECONDS: expected integer") from exc
+    # "{host}" is filled in by the browser with the address it used for the UI (LAN IP, Tailscale IP, name),
+    # so one setting works for every client.
     cfg["web"]["live_stream_url"] = env.get("LIVE_STREAM_URL", "").strip()
-    if cfg["web"]["live_stream_url"] and urlsplit(cfg["web"]["live_stream_url"]).scheme not in ("http", "https"):
-        raise ConfigError("LIVE_STREAM_URL must be an HTTP(S) browser player URL")
+    live = cfg["web"]["live_stream_url"].replace("{host}", "camera.local")
+    if live and (urlsplit(live).scheme not in ("http", "https") or not urlsplit(live).hostname):
+        raise ConfigError("LIVE_STREAM_URL must be an HTTP(S) browser player URL, e.g. http://{host}:8888/cam")
     cfg["data_dir"] = str(Path(env.get("DATA_DIR") or cfg["data_dir"]).expanduser().resolve())
     positive = {
         "camera": ["open_timeout_seconds", "read_timeout_seconds", "stale_seconds", "reconnect_max_seconds"],
