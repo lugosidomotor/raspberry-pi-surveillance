@@ -202,6 +202,7 @@ def create_app(cfg, runtime=None):
 
         @app.get("/")
         @app.get("/events")
+        @app.get("/tablet")
         def page():
             return FileResponse(STATIC / "index.html")
 

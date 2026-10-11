@@ -1,6 +1,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const isEvents = location.pathname === "/events";
+const page = location.pathname.replace(/^\/+|\/+$/g, "") || "home";
+const isEvents = page === "events", isTablet = page === "tablet";
 const DAY_NAMES = ["V", "H", "K", "Sze", "Cs", "P", "Szo"];
 const LABELS = {person: "Személy", car: "Autó", cat: "Macska", dog: "Kutya", bicycle: "Kerékpár"};
 const COLORS = ["#e8c31c", "#2aa6e3", "#9aa3ab", "#b48cf0", "#ff8576"];
@@ -15,7 +16,7 @@ const addDays = (value, days) => { const day = new Date(value); day.setDate(day.
 const sameDay = (a, b) => midnight(a).getTime() === midnight(b).getTime();
 
 let selectedDay = midnight(new Date()), rotation = 0, liveUrl, streamSize = "";
-let watchdogAuto = true, loading = false, offset = 0, filter = "", tracked = [];
+let watchdogAuto = true, loading = false, offset = 0, filter = "", tracked = [], wasOnline = null;
 const rendered = {};
 
 async function get(url) {
@@ -57,6 +58,7 @@ function applyStreamSize(width, height) {
   streamSize = `${width}x${height}`;
   const style = $("frame").style;
   style.setProperty("--frame-aspect", `${width} / ${height}`);
+  style.setProperty("--frame-ratio", String(width / height));
   style.setProperty("--frame-aspect-rotated", `${height} / ${width}`);
   style.setProperty("--portrait-factor", String(height / width));
   style.setProperty("--rot-width", `${width / height * 100}%`);
@@ -90,6 +92,9 @@ function updateLive(s) {
   $("motion").classList.toggle("active", Boolean(s.motion));
   const d = s.last_detection;
   text("detection", d ? `AI: ${name(d.label)} · ${Math.round(d.confidence * 100)}% · ${clock(d.timestamp)}` : "AI: még nincs találat");
+  // A player that lost its stream rarely recovers by itself: reload it when the camera comes back.
+  if (online && wasOnline === false) { const player = $("frame").querySelector("iframe"); if (player) player.src = liveUrl; }
+  wasOnline = online;
   if (s.live_stream_url === liveUrl) return;
   liveUrl = s.live_stream_url;
   $("frame").querySelector("iframe")?.remove();
@@ -393,6 +398,106 @@ async function updateEventsView() {
   $("next").disabled = data.events.length < LIMIT;
 }
 
+// --- tablet view: the essentials beside the stream, for a screen that stays on all day ------------------------------
+function updateClock() {
+  const now = new Date();
+  text("t-time", now.toLocaleTimeString("hu-HU", {hour: "2-digit", minute: "2-digit"}));
+  text("t-date", now.toLocaleDateString("hu-HU", {weekday: "long", month: "long", day: "numeric"}));
+}
+function updateTablet(s) {
+  const online = s.camera === "connected", starting = s.camera === "connecting", h = s.hardware || {}, w = s.watchdog || {};
+  text("t-camera", online ? "Kamera online" : starting ? "Kamera indul…" : "Kamera offline");
+  $("t-camera").dataset.tone = online ? "positive" : starting ? "muted" : "danger";
+  text("t-motion", s.motion ? "Mozgás észlelve" : "Nincs mozgás");
+  $("t-motion").classList.toggle("active", Boolean(s.motion));
+  const [label, kind] = !w.installed ? ["Nincs telepítve", "muted"] : w.stale ? ["Nem jelentkezik", "warn"] : WATCHDOG[w.state] || [w.state, "muted"];
+  text("t-watchdog", label); $("t-watchdog").dataset.tone = kind === "done" ? "positive" : kind === "muted" ? "muted" : "danger";
+  text("t-ai", s.ai_inference_ms == null ? "várakozás" : `${number(s.ai_inference_ms)} ms`);
+  const hot = h.temperature_c >= 75;
+  text("t-cpu", [h.cpu_percent == null ? null : `${Math.round(h.cpu_percent)}%`, h.temperature_c == null ? null : `${number(h.temperature_c)} °C`].filter(Boolean).join(" · ") || "—");
+  $("t-cpu").dataset.tone = hot ? "danger" : "positive";
+}
+async function updateTabletDay() {
+  const start = midnight(new Date()), end = addDays(start, 1), timeline = await get(range(start, end));
+  const slots = Array.from({length: 8}, () => 0), slotSeconds = (end - start) / 8000;
+  for (const bucket of timeline.buckets) slots[Math.min(7, Math.floor(bucket.index * timeline.bucket_seconds / slotSeconds))] += bucket.count;
+  const peak = Math.max(1, ...slots), current = Math.min(7, Math.floor((Date.now() - start.getTime()) / 1000 / slotSeconds));
+  text("t-count", String(timeline.total));
+  if (!changed("t-bars", [slots, current])) return;
+  $("t-bars").setAttribute("aria-label", "Mai események 3 órás szakaszokban");
+  $("t-bars").replaceChildren(...slots.map((count, index) => {
+    const item = node("li", index === current ? "now" : ""), fill = node("span");
+    fill.style.setProperty("--h", `${count ? Math.max(12, count / peak * 100) : 0}%`);
+    item.setAttribute("aria-label", `${String(index * 3).padStart(2, "0")}–${String(index * 3 + 3).padStart(2, "0")} óra: ${count} esemény`);
+    item.append(fill);
+    return item;
+  }));
+}
+async function updateTabletEvents() {
+  const events = (await get("/api/events?limit=3")).events;
+  if (!changed("t-events", events.map(e => [e.id, e.activity_status, e.notification_status]))) return;
+  $("t-events").replaceChildren(...(events.length ? events.map(event => {
+    const state = eventState(event), item = node("li"), thumb = link(event.snapshot_url, null), image = node("img"), body = node("div");
+    thumb.className = "thumb";
+    thumb.setAttribute("aria-label", `Snapshot: ${name(event.label)}, ${event.zone}, ${stamp(event.timestamp)}`);
+    image.src = event.thumbnail_url || event.snapshot_url; image.alt = ""; image.width = 84; image.height = 63;
+    image.addEventListener("error", () => thumb.classList.add("missing"), {once: true});
+    thumb.append(image);
+    const pill = node("span", "pill", state.pill);
+    pill.dataset.kind = state.kind;
+    const when = new Date(event.timestamp);
+    body.append(node("strong", null, `${name(event.label)} · ${event.zone}`), node("p", null, `${sameDay(when, new Date()) ? clock(when) : stamp(when)} · ${Math.round(event.confidence * 100)}%`), pill);
+    item.append(thumb, body);
+    return item;
+  }) : [node("li", "empty", "Ma még nincs esemény.")]));
+}
+// Keep the screen on. Browsers allow this only on HTTPS (for example Tailscale Serve) or localhost.
+let wakeLock = null;
+async function keepAwake() {
+  if (document.hidden || wakeLock) return;
+  if (!("wakeLock" in navigator)) {
+    $("t-wake").hidden = false;
+    $("t-wake").textContent = window.isSecureContext ? "Ez a böngésző nem tudja ébren tartani a kijelzőt; kapcsold ki a tablet automatikus zárolását." : "A kijelző ébren tartásához HTTPS-cím kell (például Tailscale Serve), vagy kapcsold ki a tablet automatikus zárolását.";
+    return;
+  }
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+    $("t-wake").hidden = true;
+  } catch {
+    $("t-wake").hidden = false;
+    $("t-wake").textContent = "A kijelző ébren tartását a böngésző most nem engedte; kapcsold ki a tablet automatikus zárolását.";
+  }
+}
+function setupTablet() {
+  document.body.classList.add("tablet");
+  $("tablet-panel").hidden = false;
+  document.title = "Camera Stack · Tablet";
+  $("t-exit").setAttribute("href", home.getAttribute("href"));
+  updateClock();
+  setInterval(updateClock, 15000);
+  keepAwake();
+  document.addEventListener("visibilitychange", keepAwake);
+  const root = document.documentElement, canFullscreen = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  $("t-fullscreen").hidden = !canFullscreen;
+  const fullscreen = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const label = () => { const value = fullscreen() ? "Kilépés a teljes képernyőből" : "Teljes képernyő"; $("t-fullscreen").setAttribute("aria-label", value); $("t-fullscreen").title = value; };
+  $("t-fullscreen").addEventListener("click", () => {
+    if (fullscreen()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+  });
+  document.addEventListener("fullscreenchange", label);
+  document.addEventListener("webkitfullscreenchange", label);
+  // A few pixels of drift every few minutes, so a static layout does not burn into the screen.
+  const drift = [[0, 0], [3, 2], [-2, 3], [2, -3], [-3, -2]];
+  let step = 0;
+  setInterval(() => { step = (step + 1) % drift.length; $("tablet-panel").closest(".window").style.translate = `${drift[step][0]}px ${drift[step][1]}px`; }, 4 * 60000);
+  // A fresh page once a day keeps a long-running player and browser tab healthy.
+  const reloadAt = new Date(); reloadAt.setHours(4, 0, 0, 0);
+  if (reloadAt <= new Date()) reloadAt.setDate(reloadAt.getDate() + 1);
+  setTimeout(() => location.reload(), reloadAt - new Date());
+}
+
 // --- page and refresh ---------------------------------------------------------------------------------------------
 async function refresh() {
   if (loading) return;
@@ -402,7 +507,10 @@ async function refresh() {
     $("test-banner").hidden = !s.source?.is_test;
     if (JSON.stringify(s.tracked_objects) !== JSON.stringify(tracked)) { tracked = s.tracked_objects || []; renderFilters(); }
     if (isEvents) await updateEventsView();
-    else {
+    else if (isTablet) {
+      updateLive(s); updateTablet(s);
+      await Promise.all([updateTabletEvents(), updateTabletDay()]);
+    } else {
       updateLive(s); updateTiles(s); updateWatchdog(s.watchdog); updateIntegrations(s); updateHardware(s.hardware); updateSpotlight(s.last_event);
       await Promise.all([updateLatest(), updateDay()]);
     }
@@ -420,10 +528,11 @@ $("events-view").hidden = !isEvents;
 if (isEvents) { text("title", "Eseménynapló"); document.title = "Camera Stack · Események"; }
 const home = document.querySelector('.dock a[data-nav="home"]');
 for (const item of document.querySelectorAll(".dock a")) {
-  if (item.dataset.nav === (isEvents ? "events" : "home")) item.setAttribute("aria-current", "page");
+  if (item.dataset.nav === page) item.setAttribute("aria-current", "page");
   // Section shortcuts live on the overview; from the event log they open it at that card.
   if (item.dataset.nav === "section") item.addEventListener("click", event => { if (isEvents) { event.preventDefault(); location.href = home.getAttribute("href") + item.getAttribute("href"); } });
 }
+if (isTablet) setupTablet();
 $("spot-image").addEventListener("error", () => $("spot-link").classList.add("missing"));
 $("rotate").addEventListener("click", rotate);
 $("wd-toggle").addEventListener("click", toggleWatchdog);

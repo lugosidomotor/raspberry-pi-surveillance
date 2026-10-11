@@ -278,6 +278,7 @@ def test_web_starts_without_optional_env_and_health_offline_is_ok(cfg, store):
     with TestClient(create_app(cfg, rt)) as client:
         assert client.get("/").status_code == 200
         assert client.get("/events").status_code == 200
+        assert client.get("/tablet").status_code == 200  # the always-on wall/tablet view
         assert client.get("/health").json()["status"] == "ok"
         status = client.get("/api/status").json()
         assert not status["notifications_enabled"] and not status["backup_enabled"]

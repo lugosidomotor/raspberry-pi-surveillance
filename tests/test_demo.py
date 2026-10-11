@@ -6,9 +6,12 @@ def test_demo_inlines_the_real_ui_with_the_mock_backend_first():
     app = (build_demo.STATIC / "app.js").read_text(encoding="utf-8")
     assert 'src="/static/' not in html and 'href="/static/' not in html  # self-contained: opens from disk
     assert "/static/fonts/" not in html and "data:font/woff2;base64," in html
-    assert 'href="/events"' not in html and 'href="?page=events"' in html
+    assert 'href="/events"' not in html and 'href="?page=events"' in html and 'href="?page=tablet"' in html
     assert app.splitlines()[-1] in html  # the unchanged UI code, not a copy that can drift
-    mock, ui = html.index("window.fetch = async"), html.index("const isEvents = new URLSearchParams(location.search)")
+    mock, ui = (
+        html.index("window.fetch = async"),
+        html.index('const page = new URLSearchParams(location.search).get("page")'),
+    )
     assert mock < ui  # the fake API is in place before the UI's first request
 
 

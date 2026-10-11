@@ -28,6 +28,9 @@
 .demo-media-body img, .demo-media-body canvas { display: block; max-width: 100%; max-height: calc(100vh - 170px); width: auto; height: auto; }
 .demo-media-note { padding: 12px 20px 16px; color: var(--faint); font-size: 12px; }
 
+/* In the tablet view the panel takes the right edge; the demo controls move to the left. */
+body.tablet .demo-panel { left: 20px; right: auto; align-items: flex-start; }
+
 @media (max-width: 760px) {
   .demo-toggle-hint { display: none; }
   .demo-panel { left: 16px; right: 16px; align-items: stretch; }

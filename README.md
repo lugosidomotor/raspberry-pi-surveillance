@@ -16,7 +16,7 @@ Alapbeállítás: **csak ember**, **teljes kép egy zóna**, **2 pozitív az uto
 
 **[Demó megnyitása a böngészőben →](https://lugosidomotor.github.io/raspberry-pi-surveillance/)**
 
-[![A demó: élő kamerakép, rendszerállapot és események](docs/images/demo.jpg)](https://lugosidomotor.github.io/raspberry-pi-surveillance/)
+[![A demó: élő kamerakép, rendszerállapot és események](docs/images/dashboard.jpg)](https://lugosidomotor.github.io/raspberry-pi-surveillance/)
 
 A demó a **valódi webes felület** változatlan kódja (`app/static`). A Raspberry Pit,
 a kamerát és a szervert a böngésző szimulálja, így nincs szükség Pi-re, Dockerre
@@ -31,6 +31,27 @@ vagy kamerára. A jobb alsó **Demó · vezérlő** gombbal kipróbálhatod:
   legfeljebb háromszor.
 - **Állapotok:** teszt stream, gyenge táp, magas hőmérséklet, kevés tárhely,
   hiányzó élőkép-cím, valamint a kép forgatása és az eseménynapló lapozása.
+- **[Tablet nézet](https://lugosidomotor.github.io/raspberry-pi-surveillance/?page=tablet):**
+  lásd lent.
+
+### Tablet nézet: 0–24 figyeléshez
+
+[![Tablet nézet: nagy élőkép, mellette óra, állapot, mai események](docs/images/tablet.jpg)](https://lugosidomotor.github.io/raspberry-pi-surveillance/?page=tablet)
+
+A bal oldali sáv tablet ikonja, vagy közvetlenül a **`/tablet`** cím (érdemes
+könyvjelzőzni vagy a kezdőképernyőre tenni). A stream akkora, amekkora a képernyőn
+elfér. Mellette nagy óra, kamera- és mozgásállapot, a mai események száma
+3 órás bontásban, az utolsó 3 esemény bélyegképpel, valamint a felügyelő, az
+AI-futásidő és a CPU látszik. Álló tabletnél az adatok a stream alá kerülnek.
+
+Egész napos futásra készült:
+
+- **Kijelző:** ébren tartja (Wake Lock; ehhez HTTPS kell, például Tailscale Serve,
+  különben a tablet automatikus zárolását kell kikapcsolni). Van teljes képernyő gomb.
+- **Lejátszó:** ha a kamera kiesés után visszajön, magától újratölt. Hajnali
+  4-kor az oldal frissíti magát.
+- **Energia:** elmosás nélküli, sötét háttér.
+- **Beégés ellen:** az elrendezés néhány percenként pár pixelt elmozdul.
 
 Offline is működik: töltsd le a [`demo/camera-stack-demo.html`](demo/camera-stack-demo.html)
 fájlt, és nyisd meg duplakattintással. A demó a felület kódjából készül

@@ -61,7 +61,7 @@ standalone demo (`demo/camera-stack-demo.html`) is built from these same files.
   card (calendar, latest events) sit directly on the window.
 - **Dock:** a floating vertical pill left of the window (icons only; the label
   appears on hover or focus). Under 760px it becomes a horizontal pill at the bottom
-  left. Items: overview, event log, and shortcuts to the hardware and recovery cards
+  left. Items: overview, event log, the tablet view, and shortcuts to the hardware and recovery cards
   (from the event log they open the overview at that card).
 - `prefers-reduced-transparency` switches the window, dock and cards to opaque
   slate fills; blur is also the most expensive effect on weak devices.
@@ -103,6 +103,22 @@ A 3-column grid (`1.55fr .8fr 1.2fr`, gap 22px) inside a 1320px window:
 
 Below 1240px the grid has two columns; below 980px one. Under 760px the window
 padding shrinks, tiles go 2×2, event rows put the pill and links under the text.
+
+## Tablet view (`/tablet`)
+
+For a tablet or wall screen that shows the camera all day. The dock and window
+chrome disappear; the live view takes the left side as large as the screen height
+allows, and a panel (`clamp(270px, 26vw, 340px)`) on the right shows: a large clock
+and date with fullscreen and exit buttons, camera and motion state, today's count
+with eight 3-hour mini capsules (current one lime), the latest three events with
+thumbnails and pills, and the recovery state, AI time and CPU usage/temperature. In
+portrait the panel moves below the stream in two columns; on phones in one.
+
+Built to run 24/7: opaque dark panels with no blur, a Screen Wake Lock (HTTPS or
+localhost only; otherwise a hint says to disable auto-lock), a player reload when the
+camera comes back after an outage, a page reload at 04:00, and a 2–3px drift of the
+layout every four minutes against burn-in. Error and test-stream banners overlay the
+top of the stream.
 
 ## Typography
 

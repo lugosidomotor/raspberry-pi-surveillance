@@ -2,7 +2,10 @@
 <html lang="hu">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1118">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>Camera Stack</title>
   <link rel="icon" href="/static/camera.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
@@ -27,6 +30,9 @@
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-4.5 4.5L12 4l4.5 4.5M5 15v5h14v-5"/></symbol>
     <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></symbol>
     <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></symbol>
+    <symbol id="i-tablet" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M17.5 12h.01"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5m11-5v5h-5"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24"><path d="M10 5H5.5A1.5 1.5 0 0 0 4 6.5v11A1.5 1.5 0 0 0 5.5 19H10m4-11 4 4-4 4m4-4H9"/></symbol>
     <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19.5 4v4h-4"/></symbol>
   </svg>
 
@@ -34,6 +40,7 @@
     <nav class="dock" aria-label="Fő navigáció">
       <a href="/" data-nav="home"><svg><use href="#i-home"/></svg><span>Áttekintés</span></a>
       <a href="/events" data-nav="events"><svg><use href="#i-list"/></svg><span>Események</span></a>
+      <a href="/tablet" data-nav="tablet"><svg><use href="#i-tablet"/></svg><span>Tablet nézet</span></a>
       <a href="#hardver" data-nav="section"><svg><use href="#i-chip"/></svg><span>Hardver</span></a>
       <a href="#felugyelo" data-nav="section"><svg><use href="#i-shield"/></svg><span>Felügyelő</span></a>
     </nav>
@@ -142,6 +149,34 @@
         </div>
         <ul class="events" id="event-list" aria-live="polite"></ul>
       </section>
+
+      <!-- Tablet view (/tablet): the stream as large as possible, the essentials beside it, built to run 24/7. -->
+      <aside class="tablet-panel" id="tablet-panel" aria-label="Fő adatok" hidden>
+        <div class="t-clock">
+          <div><strong id="t-time">--:--</strong><span id="t-date">—</span></div>
+          <div class="t-actions">
+            <button class="round" id="t-fullscreen" type="button" aria-label="Teljes képernyő" title="Teljes képernyő" hidden><svg><use href="#i-expand"/></svg></button>
+            <a class="round" href="/" id="t-exit" aria-label="Kilépés a tablet nézetből" title="Kilépés a tablet nézetből"><svg><use href="#i-exit"/></svg></a>
+          </div>
+        </div>
+        <div class="t-status"><span class="chip status" id="t-camera" data-tone="muted">Kapcsolódás…</span><span class="motion" id="t-motion">Nincs mozgás</span></div>
+        <section class="t-card t-today" aria-labelledby="t-today-heading">
+          <div class="t-head"><h2 id="t-today-heading">Ma</h2><p><strong id="t-count">0</strong> esemény</p></div>
+          <ol class="t-bars" id="t-bars"></ol>
+        </section>
+        <section class="t-card t-latest" aria-labelledby="t-latest-heading">
+          <h2 id="t-latest-heading">Legutóbbi események</h2>
+          <ul id="t-events" aria-live="polite"></ul>
+        </section>
+        <section class="t-card t-system" aria-label="Rendszer">
+          <dl class="facts">
+            <div><dt>Felügyelő</dt><dd id="t-watchdog">—</dd></div>
+            <div><dt>AI-futásidő</dt><dd id="t-ai">—</dd></div>
+            <div><dt>CPU</dt><dd id="t-cpu">—</dd></div>
+          </dl>
+        </section>
+        <p class="t-note" id="t-wake" hidden></p>
+      </aside>
     </main>
   </div>
 </body>

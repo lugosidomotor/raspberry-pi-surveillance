@@ -298,3 +298,67 @@ button.round:hover:not(:disabled) { background: rgba(255, 255, 255, .18); }
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Tablet view (/tablet): the stream as large as the screen allows, the essentials beside it.
+   Built to run all day: no blur, a dark background, and a slow few-pixel drift against burn-in. */
+.tablet-panel { display: none; }
+body.tablet { --pad: 16px; --panel: clamp(270px, 26vw, 340px); background: #05090d; }
+body.tablet .environment, body.tablet .dock { display: none; }
+body.tablet .stage { display: block; padding: 0; }
+body.tablet .window {
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--panel); grid-template-rows: minmax(0, 1fr); gap: var(--pad);
+  height: 100vh; height: 100dvh; padding: var(--pad); border: 0; border-radius: 0; background: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; transition: translate 3s ease-in-out;
+}
+body.tablet #error, body.tablet #test-banner { position: fixed; z-index: 20; top: var(--pad); left: var(--pad); right: calc(var(--panel) + 2 * var(--pad)); margin: 0; }
+body.tablet .grid { display: block; min-height: 0; }
+body.tablet .grid > :not(.live) { display: none; }
+body.tablet .live { display: grid; place-items: center; height: 100%; padding: 0; background: none; border: 0; }
+body.tablet .live .card-head, body.tablet .live .live-foot { display: none; }
+body.tablet .frame { width: min(100%, calc((100dvh - 2 * var(--pad)) * var(--frame-ratio, 1.3334))); border-radius: 20px; }
+body.tablet .frame[data-rotation="90"], body.tablet .frame[data-rotation="270"] { width: min(100%, calc((100dvh - 2 * var(--pad)) * var(--portrait-factor, .75))); }
+body.tablet .tablet-panel { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.t-clock { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.t-clock strong { display: block; font-size: clamp(42px, 4.8vw, 60px); font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.t-clock span { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
+.t-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 14px; }
+.t-status .motion.active { color: var(--lime); }
+.t-card { padding: 14px 16px; border-radius: 20px; background: #10171e; border: 1px solid rgba(255, 255, 255, .07); }
+.t-card h2 { color: var(--muted); font-size: 14px; font-weight: 700; }
+.t-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.t-head p { color: var(--muted); font-size: 14px; }
+.t-head strong { margin-right: 4px; color: #fff; font-size: 30px; font-weight: 800; }
+.t-bars { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; height: 52px; margin: 10px 0 0; padding: 0; list-style: none; }
+.t-bars li { position: relative; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, .07); }
+.t-bars li span { position: absolute; left: 0; right: 0; bottom: 0; height: var(--h); border-radius: 999px; background: rgba(255, 255, 255, .42); }
+.t-bars li.now span { background: var(--lime); }
+.t-latest ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.t-latest li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--rule); }
+.t-latest li:first-child { border-top: 0; }
+.t-latest .thumb img { width: 72px; height: 54px; }
+.t-latest strong { display: block; font-size: 14px; font-weight: 700; }
+.t-latest p { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.t-latest .pill { min-height: 22px; margin-top: 5px; padding: 2px 10px; font-size: 12px; }
+.t-latest .empty { display: block; padding: 12px 0; text-align: left; }
+.t-system .facts div:first-child { border-top: 0; padding-top: 0; }
+.t-actions { display: flex; flex-shrink: 0; gap: 8px; }
+.t-actions .round { width: 44px; padding: 0; }
+.t-note { color: var(--faint); font-size: 12px; line-height: 1.5; }
+/* Short landscape screens (browser toolbars, small tablets): drop the system card, then the third event. */
+@media (orientation: landscape) and (max-height: 740px) { body.tablet .t-system { display: none; } }
+@media (orientation: landscape) and (max-height: 620px) {
+  body.tablet .t-latest li:nth-child(n+3) { display: none; }
+  body.tablet .t-clock strong { font-size: 40px; }
+  body.tablet .t-bars { height: 40px; }
+}
+@media (orientation: portrait) {
+  body.tablet .window { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: auto; min-height: 100dvh; }
+  body.tablet #error, body.tablet #test-banner { right: var(--pad); }
+  body.tablet .frame { width: min(100%, calc(58dvh * var(--frame-ratio, 1.3334))); }
+  body.tablet .tablet-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "clock clock" "status status" "today latest" "system latest" "note note"; align-content: start; gap: 12px; overflow: visible; }
+  .t-clock { grid-area: clock; } .t-status { grid-area: status; } .t-today { grid-area: today; }
+  .t-latest { grid-area: latest; } .t-system { grid-area: system; } .t-note { grid-area: note; }
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  body.tablet .tablet-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: "clock" "status" "today" "latest" "system" "note"; }
+}

@@ -47,11 +47,11 @@ def build() -> str:
     icon = base64.b64encode((STATIC / "camera.svg").read_bytes()).decode("ascii")
     styles = inline_assets((STATIC / "style.css").read_text(encoding="utf-8"))
     styles += (SOURCES / "demo.css").read_text(encoding="utf-8")
-    # A file:// page has no server routes: the events view becomes ?page=events.
+    # A file:// page has no server routes: /events and /tablet become ?page=events and ?page=tablet.
     app = replace_once(
         app,
-        'const isEvents = location.pathname === "/events";',
-        'const isEvents = new URLSearchParams(location.search).get("page") === "events";',
+        'const page = location.pathname.replace(/^\\/+|\\/+$/g, "") || "home";',
+        'const page = new URLSearchParams(location.search).get("page") || "home";',
         "app.js",
     )
     page = replace_once(page, "<title>Camera Stack</title>", "<title>Camera Stack · Demó</title>", "index.html")
@@ -63,7 +63,9 @@ def build() -> str:
     )
     page = replace_once(page, '<link rel="stylesheet" href="/static/style.css">', f"<style>\n{styles}</style>", "index")
     page = replace_once(page, '  <script defer src="/static/app.js"></script>\n', "", "index.html")
-    page = page.replace('href="/events"', 'href="?page=events"').replace('href="/"', 'href="?"')
+    for route in ("events", "tablet"):
+        page = page.replace(f'href="/{route}"', f'href="?page={route}"')
+    page = page.replace('href="/"', 'href="?"')
     scripts = inline_script((SOURCES / "mock.js").read_text(encoding="utf-8"), "mock.js") + inline_script(app, "app.js")
     return replace_once(page, "</body>", scripts + "</body>", "index.html")
 
