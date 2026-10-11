@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import math
+import mimetypes
 from pathlib import Path
 from urllib.parse import quote
 
@@ -18,6 +19,7 @@ from .hardware import HardwareMonitor
 from .source import source_identity
 
 STATIC = Path(__file__).parent / "static"
+mimetypes.add_type("font/woff2", ".woff2")  # the self-hosted UI font; older Pythons serve it untyped
 
 
 class Rotation(BaseModel):
@@ -167,12 +169,14 @@ def create_app(cfg, runtime=None):
         # Browser-local midnight boundaries accommodate 23/25-hour DST days.
         if not math.isfinite(start) or not math.isfinite(end) or not 0 < end - start <= 26 * 3600:
             raise HTTPException(422, "Timeline range must be finite and at most 26 hours")
-        buckets = request.app.state.runtime.store.timeline(start, end)
+        store = request.app.state.runtime.store
+        buckets = store.timeline(start, end)
         return {
             "start": start,
             "end": end,
             "bucket_seconds": 900,
             "total": sum(b["count"] for b in buckets),
+            "labels": store.label_counts(start, end),
             "buckets": [{**b, "event": public_event(b["event"])} for b in buckets],
         }
 

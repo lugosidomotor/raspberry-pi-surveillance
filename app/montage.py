@@ -49,6 +49,9 @@ class MontageRecorder:
         return self.worker is not None
 
     def start(self):
+        interrupted = self.store.fail_interrupted_montages()
+        if interrupted:
+            log.warning("montage interrupted by restart: %d event(s) marked failed", interrupted)
         if self.worker:
             self.worker.start()
 

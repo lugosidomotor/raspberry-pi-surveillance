@@ -64,6 +64,17 @@ def test_timeline_api_validation_empty_and_public_urls(catalog, tmp_path):
         event(catalog, "sample", "2026-10-04T08:00:00+00:00")
         start, end = epoch("2026-10-04T00:00:00+00:00"), epoch("2026-10-05T00:00:00+00:00")
         data = client.get(f"/api/timeline?start={start}&end={end}").json()
-        assert data["total"] == 1
+        assert data["total"] == 1 and data["labels"] == {"person": 1}
         assert data["buckets"][0]["event"]["snapshot_url"] == "/media/events/sample.jpg"
         assert data["bucket_seconds"] == 900
+        font = client.get("/static/fonts/manrope-latin.woff2")
+        assert font.status_code == 200 and font.headers["content-type"] == "font/woff2"
+
+
+def test_label_counts_cover_the_range_only(catalog):
+    event(catalog, "yesterday", "2026-10-03T23:00:00+00:00")
+    event(catalog, "today", "2026-10-04T08:00:00+00:00")
+    catalog.add({**catalog.list_events(1)[0], "id": "car", "label": "car", "timestamp": "2026-10-04T09:00:00+00:00"})
+    start, end = epoch("2026-10-04T00:00:00+00:00"), epoch("2026-10-05T00:00:00+00:00")
+    assert catalog.label_counts(start, end) == {"person": 1, "car": 1}
+    assert catalog.label_counts(start - 86400, start) == {"person": 1}

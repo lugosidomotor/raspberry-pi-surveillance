@@ -8,6 +8,7 @@ The result is one self-contained HTML file that opens straight from disk, withou
 import argparse
 import base64
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,11 +29,24 @@ def inline_script(code: str, where: str) -> str:
     return f"<script>\n{code}</script>\n"
 
 
+def inline_assets(css: str) -> str:
+    """Embed url(/static/...) assets (the self-hosted fonts) as data URIs."""
+    types = {".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png"}
+
+    def embed(match):
+        path = STATIC / match.group(1)
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f'url("data:{types[path.suffix]};base64,{data}")'
+
+    return re.sub(r"""url\(["']?/static/([^"')]+)["']?\)""", embed, css)
+
+
 def build() -> str:
     page = (STATIC / "index.html").read_text(encoding="utf-8")
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     icon = base64.b64encode((STATIC / "camera.svg").read_bytes()).decode("ascii")
-    styles = (STATIC / "style.css").read_text(encoding="utf-8") + (SOURCES / "demo.css").read_text(encoding="utf-8")
+    styles = inline_assets((STATIC / "style.css").read_text(encoding="utf-8"))
+    styles += (SOURCES / "demo.css").read_text(encoding="utf-8")
     # A file:// page has no server routes: the events view becomes ?page=events.
     app = replace_once(
         app,
@@ -40,9 +54,7 @@ def build() -> str:
         'const isEvents = new URLSearchParams(location.search).get("page") === "events";',
         "app.js",
     )
-    page = replace_once(
-        page, "<title>Camera Stack · Megfigyelés</title>", "<title>Camera Stack · Demó</title>", "index"
-    )
+    page = replace_once(page, "<title>Camera Stack</title>", "<title>Camera Stack · Demó</title>", "index.html")
     page = replace_once(
         page,
         '<link rel="icon" href="/static/camera.svg" type="image/svg+xml">',

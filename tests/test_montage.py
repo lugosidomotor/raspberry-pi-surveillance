@@ -124,6 +124,16 @@ def test_disconnect_without_frames_marks_failure_and_disabled_is_inert(cfg, stor
     assert disabled.close(1)
 
 
+def test_restart_settles_montages_that_can_never_finish(cfg, store):
+    store.add({"id": "lost", "timestamp": "2026-10-11T01:47:00.000+00:00", "label": "person", "zone": "kapu"})
+    store.update("lost", montage_status="recording")
+    store.add({"id": "done", "timestamp": "2026-10-11T01:40:00.000+00:00", "label": "person", "zone": "kapu"})
+    store.update("done", montage_status="completed")
+    cfg["montage"]["enabled"] = False
+    MontageRecorder(cfg, store, Status(cfg)).start()  # the episode lived in the previous process's memory
+    assert {e["id"]: e["montage_status"] for e in store.list_events()} == {"lost": "failed", "done": "completed"}
+
+
 def test_compose_grid_scales_mismatched_tiles():
     stamp = datetime(2026, 10, 8, 21, 0, 0)
     tiles = [(stamp, np.zeros((270, 480, 3), np.uint8))] * 2 + [(stamp, np.zeros((100, 100, 3), np.uint8))]

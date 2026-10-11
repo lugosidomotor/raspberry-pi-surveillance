@@ -1,58 +1,61 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const isEvents = location.pathname === "/events";
-$("live-view").hidden = isEvents;
-$(isEvents ? "nav-events" : "nav-live").classList.add("active");
-$(isEvents ? "nav-events" : "nav-live").setAttribute("aria-current", "page");
-if (isEvents) { $("events-heading").textContent = "Eseménynapló"; document.title = "Camera Stack · Események"; }
-let offset = 0, loading = false, liveUrl = null, eventCount = 0, eventsSignature = null;
-const limit = 24;
-const date = value => value ? new Date(value).toLocaleString("hu-HU") : "—";
-const enabled = value => value ? "Bekapcsolva" : "Kikapcsolva";
-const bytes = value => `${(value / 1024 ** 3).toLocaleString("hu-HU", {maximumFractionDigits:1})} GiB`;
-const numeric = value => value.toLocaleString("hu-HU", {maximumFractionDigits:1});
-function hardwareBar(id, value, warning = false) {
-  const bar = $(id);
-  bar.style.transform = `scaleX(${value == null ? 0 : Math.max(0, Math.min(100, value)) / 100})`;
-  bar.classList.toggle("warning", warning);
+const DAY_NAMES = ["V", "H", "K", "Sze", "Cs", "P", "Szo"];
+const LABELS = {person: "Személy", car: "Autó", cat: "Macska", dog: "Kutya", bicycle: "Kerékpár"};
+const COLORS = ["#e8c31c", "#2aa6e3", "#9aa3ab", "#b48cf0", "#ff8576"];
+const LIMIT = 24;
+const name = label => LABELS[label] || label;
+const number = (value, digits = 1) => value.toLocaleString("hu-HU", {maximumFractionDigits: digits});
+const clock = value => new Date(value).toLocaleTimeString("hu-HU", {hour: "2-digit", minute: "2-digit"});
+const stamp = value => new Date(value).toLocaleString("hu-HU", {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+const gib = value => `${number(value / 1024 ** 3)} GiB`;
+const midnight = value => { const day = new Date(value); day.setHours(0, 0, 0, 0); return day; };
+const addDays = (value, days) => { const day = new Date(value); day.setDate(day.getDate() + days); return day; };
+const sameDay = (a, b) => midnight(a).getTime() === midnight(b).getTime();
+
+let selectedDay = midnight(new Date()), rotation = 0, liveUrl, streamSize = "";
+let watchdogAuto = true, loading = false, offset = 0, filter = "", tracked = [];
+const rendered = {};
+
+async function get(url) {
+  const result = await fetch(url, {cache: "no-store", signal: AbortSignal.timeout(10000)});
+  if (!result.ok) throw new Error("HTTP " + result.status);
+  return result.json();
 }
-function updateHardware(h) {
-  $("hardware-panel").hidden = isEvents || !h?.is_raspberry_pi;
-  if (!h?.is_raspberry_pi) return;
-  text("hardware-model", h.model.replace(/^Raspberry Pi /, "Pi "));
-  text("hw-temperature", h.temperature_c == null ? "—" : `${numeric(h.temperature_c)} °C`);
-  text("hw-temperature-detail", h.temperature_c == null ? "Nem elérhető" : h.temperature_c >= 75 ? "Magas" : "CPU");
-  text("hw-cpu", h.cpu_percent == null ? "Mérés…" : `${numeric(h.cpu_percent)}%`);
-  text("hw-cores", h.cpu_cores == null ? "—" : `${h.cpu_cores} mag`);
-  text("hw-frequency", h.undervoltage ? "lassítva (táp)" : h.cpu_frequency_mhz == null ? "—" : `${Math.round(h.cpu_frequency_mhz)} MHz`);
-  text("hw-load", h.load_average ? h.load_average.map(v => v.toLocaleString("hu-HU", {minimumFractionDigits:2,maximumFractionDigits:2})).join(" / ") : "—");
-  text("hw-memory", h.memory ? `${numeric(h.memory.used_percent)}%` : "—");
-  text("hw-memory-detail", h.memory ? `${bytes(h.memory.used_bytes)} / ${bytes(h.memory.total_bytes)}` : "Nem elérhető");
-  text("hw-disk", h.disk ? bytes(h.disk.free_bytes) : "—");
-  text("hw-disk-detail", h.disk ? `${numeric(h.disk.used_percent)}% foglalt · ${bytes(h.disk.total_bytes)}` : "Nem elérhető");
-  hardwareBar("hw-temperature-bar", h.temperature_c, h.temperature_c >= 75);
-  hardwareBar("hw-cpu-bar", h.cpu_percent, h.cpu_percent >= 90);
-  hardwareBar("hw-memory-bar", h.memory?.used_percent, h.memory?.used_percent >= 90);
-  hardwareBar("hw-disk-bar", h.disk?.used_percent, Boolean(h.disk && h.disk.free_bytes < h.disk.total_bytes * .1));
-  const minutes = Math.floor((h.uptime_seconds || 0) / 60);
-  text("hw-uptime", h.uptime_seconds == null ? "—" : `${minutes >= 1440 ? `${Math.floor(minutes / 1440)} n ` : ""}${Math.floor(minutes % 1440 / 60)} ó ${minutes % 60} p`);
-  $("hardware-warning").hidden = !h.warnings?.length;
-  text("hardware-warning", h.warnings?.join(" · ") || "");
+// The only writes: a JSON body forces a CORS preflight, so other websites cannot change settings.
+async function post(url, body) {
+  const result = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal: AbortSignal.timeout(10000)});
+  if (!result.ok) throw new Error("HTTP " + result.status);
+  return result.json();
 }
-const stateNames = {silent:"csendes (alacsony megbízhatóság, nincs értesítés)", sent:"elküldve", failed:"hiba", finished:"kész", uploading:"feltöltés…", idle:"várakozás", queued:"sorban", cooldown:"cooldown", disabled:"kikapcsolva", recording:"rögzítés…", completed:"kész"};
-// Emoji give an at-a-glance state; the adjacent text still names it, so they stay hidden from screen readers.
-const stateIcons = {silent:"🔕", captured:"🎞️", sent:"✅", completed:"✅", finished:"✅", failed:"❌", queued:"⏳", recording:"⏳", analyzing:"⏳", uploading:"⏳", cooldown:"⏸️", disabled:"➖"};
-const verdictIcons = {"Gyanús":"🛑", "Nem gyanús":"✅"};
-function statusLine(tag, icon, label, className) { const line = node(tag, null, className); if (icon) { const mark = node("span", icon, "status-icon"); mark.setAttribute("aria-hidden", "true"); line.append(mark); } line.append(label); return line; }
+function node(tag, className, content) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (content != null) element.textContent = content;
+  return element;
+}
+function text(id, value) { if ($(id).textContent !== value) $(id).textContent = value; }
 function error(message) { $("error").textContent = message; $("error").hidden = !message; }
-async function get(url) { const result = await fetch(url, {cache:"no-store", signal:AbortSignal.timeout(10000)}); if (!result.ok) throw new Error("HTTP " + result.status); return result.json(); }
-function text(id, value) { $(id).textContent = value; }
-function tone(id, value) { $(id).dataset.tone = value; }
-let rotation = 0, streamSize = "";
+// Re-render a region only when its data changed, so hover, focus and images survive the 5-second refresh.
+function changed(key, data) { const signature = JSON.stringify(data); if (rendered[key] === signature) return false; rendered[key] = signature; return true; }
+// Static SVG rings from numbers only (no API text), shared by the donut, gauges and progress spinners.
+function arc(radius, width, parts, track = "rgba(255,255,255,.1)") {
+  const size = (radius + width) * 2, length = 2 * Math.PI * radius;
+  let start = 0, circles = `<circle cx="${size / 2}" cy="${size / 2}" r="${radius}" stroke="${track}" stroke-width="${width}" fill="none"/>`;
+  for (const {share, color, gap = 0} of parts) {
+    const span = Math.max(0.001, share * length - gap);
+    circles += `<circle cx="${size / 2}" cy="${size / 2}" r="${radius}" stroke="${color}" stroke-width="${width}" fill="none" stroke-linecap="round" stroke-dasharray="${span} ${length}" stroke-dashoffset="${-start - gap / 2}"/>`;
+    start += share * length;
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" aria-hidden="true">${circles}</svg>`;
+}
+
+// --- live view ------------------------------------------------------------------------------------------------
 // The viewer follows the stream's real aspect ratio (e.g. 4:3 full sensor), also when CSS rotates it.
 function applyStreamSize(width, height) {
   streamSize = `${width}x${height}`;
-  const style = $("video-surface").style;
+  const style = $("frame").style;
   style.setProperty("--frame-aspect", `${width} / ${height}`);
   style.setProperty("--frame-aspect-rotated", `${height} / ${width}`);
   style.setProperty("--portrait-factor", String(height / width));
@@ -61,224 +64,372 @@ function applyStreamSize(width, height) {
 }
 function applyRotation(value) {
   rotation = value;
-  $("video-surface").dataset.rotation = String(value);
-  text("rotate", `↻ ${value}°`);
-  $("rotate").setAttribute("aria-label", `Kép forgatása, jelenleg ${value} fok`);
+  $("frame").dataset.rotation = String(value);
+  text("rotate-label", `${value}°`);
+  $("rotate").setAttribute("aria-label", `Kép forgatása 90 fokkal, jelenleg ${value} fok`);
 }
 async function rotate() {
-  const next = (rotation + 90) % 360;
   $("rotate").disabled = true;
-  try {
-    const result = await fetch("/api/settings/rotation", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({rotation:next}), signal:AbortSignal.timeout(10000)});
-    if (!result.ok) throw new Error("HTTP " + result.status);
-    applyRotation((await result.json()).rotation); error("");
-  } catch { error("Nem sikerült elforgatni a képet. Próbáld újra."); }
+  try { applyRotation((await post("/api/settings/rotation", {rotation: (rotation + 90) % 360})).rotation); error(""); }
+  catch { error("Nem sikerült elforgatni a képet. Próbáld újra."); }
   finally { $("rotate").disabled = false; }
 }
-const watchdogStates = {ok:["✅ Figyel, minden rendben", "positive"], warning:["⚠️ Probléma, figyelés", "danger"], recovering:["🔄 Helyreállítás folyamatban", "danger"], rebooting:["🔄 Újraindítás", "danger"], blocked:["⛔ Beavatkozás letiltva", "danger"]};
-const watchdogActions = {"restart-source":"kameraforrás újraindítva", reboot:"Pi újraindítva", "dry-run":"próba"};
-let watchdogAuto = true;
+function updateLive(s) {
+  const online = s.camera === "connected", starting = s.camera === "connecting";
+  if (typeof s.rotation === "number" && s.rotation !== rotation) applyRotation(s.rotation);
+  let [width, height] = [4, 3];
+  if (Array.isArray(s.frame_size)) {
+    // Reported frames are already turned by the app; the embedded player shows the unturned stream.
+    [width, height] = s.rotation % 180 ? [s.frame_size[1], s.frame_size[0]] : s.frame_size;
+    if (`${width}x${height}` !== streamSize) applyStreamSize(width, height);
+  }
+  // The camera state lives on the live view itself rather than in a page header.
+  text("live-meta", online ? `${number(s.camera_fps)} fps · ${width}×${height}` : starting ? "Kamera indul…" : "Kamera offline");
+  $("live-meta").dataset.tone = online ? "positive" : starting ? "muted" : "danger";
+  text("motion", s.motion ? "Mozgás észlelve" : "Nincs mozgás");
+  $("motion").classList.toggle("active", Boolean(s.motion));
+  const d = s.last_detection;
+  text("detection", d ? `AI: ${name(d.label)} · ${Math.round(d.confidence * 100)}% · ${clock(d.timestamp)}` : "AI: még nincs találat");
+  if (s.live_stream_url === liveUrl) return;
+  liveUrl = s.live_stream_url;
+  $("frame").querySelector("iframe")?.remove();
+  $("stream-empty").hidden = Boolean(liveUrl);
+  if (liveUrl) {
+    const frame = document.createElement("iframe");
+    frame.src = liveUrl; frame.title = "Élő kamera lejátszó"; frame.allow = "autoplay; fullscreen; picture-in-picture"; frame.referrerPolicy = "no-referrer";
+    $("frame").append(frame);
+  }
+}
+
+// --- status cards -------------------------------------------------------------------------------------------------
+function tile(id, value, unit, label, danger = false) {
+  const element = $(id);
+  element.querySelector("strong").replaceChildren(value, ...(unit ? [node("small", null, unit)] : []));
+  element.querySelector(":scope > div > span").textContent = label;
+  element.dataset.tone = danger ? "danger" : "";
+}
+function updateTiles(s) {
+  const h = s.hardware || {};
+  tile("tile-fps", `${number(s.camera_fps)} / ${number(s.motion_fps)}`, "fps", "Kamera / mozgás", s.camera !== "connected");
+  tile("tile-ai", s.ai_inference_ms == null ? "—" : number(s.ai_inference_ms), s.ai_inference_ms == null ? "" : "ms",
+    s.ai_inference_ms == null ? `AI · ${s.device} · várakozás mozgásra` : `AI-futásidő · ${s.device}${s.ai === "ready" ? "" : " · " + s.ai}`);
+  tile("tile-temp", h.temperature_c == null ? "—" : number(h.temperature_c), h.temperature_c == null ? "" : "°C", "CPU-hőmérséklet", h.temperature_c >= 75);
+  tile("tile-disk", h.disk ? number(h.disk.free_bytes / 1024 ** 3) : "—", h.disk ? "GiB" : "", s.storage_low ? "Kevés tárhely, a mentés szünetel" : "Szabad tárhely", Boolean(s.storage_low));
+}
+function fact(label, value, tone, icon) {
+  const row = node("div"), dt = node("dt"), dd = node("dd", null, value);
+  if (icon) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"), use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    svg.setAttribute("class", "fact-icon"); svg.setAttribute("aria-hidden", "true"); use.setAttribute("href", "#" + icon);
+    svg.append(use); dt.append(svg);
+  }
+  dt.append(label);
+  if (tone) dd.dataset.tone = tone;
+  row.append(dt, dd);
+  return row;
+}
+const UPLOADS = {idle: "várakozás", uploading: "feltöltés…", finished: "kész", failed: "hiba", queued: "sorban"};
+function updateIntegrations(s) {
+  const on = value => value ? ["Bekapcsolva", "positive"] : ["Kikapcsolva", "muted"];
+  const upload = s.backup_enabled ? [UPLOADS[s.upload_status] || s.upload_status, s.upload_status === "failed" ? "danger" : "positive"] : on(false);
+  const rows = [
+    ["Értesítések", ...on(s.notifications_enabled), "i-bell"],
+    ["Cloud backup", ...on(s.backup_enabled), "i-cloud"],
+    ["Feltöltés", ...upload, "i-upload"],
+    ["Eseményklip", ...on(s.record_events), "i-film"],
+    ["24/7 rögzítés", ...on(s.continuous_recording), "i-rec"],
+    ["Videóelemzés", ...on(s.activity_analysis_enabled), "i-spark"],
+    ["Mentés állapota", s.storage_low ? "Kevés tárhely · szünetel" : "Rendben", s.storage_low ? "danger" : "positive", "i-disk"],
+  ];
+  text("retention", `${s.retention_days} nap megőrzés`);
+  if (changed("integrations", rows)) $("integrations").replaceChildren(...rows.map(row => fact(...row)));
+}
+function ago(value) {
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(value)) / 60000));
+  if (minutes < 1) return "most";
+  if (minutes < 60) return `${minutes} perce`;
+  return minutes < 1440 ? `${Math.floor(minutes / 60)} órája` : stamp(value);
+}
+function updateSpotlight(event) {
+  text("spot-ago", event ? ago(event.timestamp) : "—");
+  $("spot-pill").hidden = !event;
+  $("spot-link").hidden = !event;
+  if (!event) return;
+  const state = eventState(event);
+  text("spot-title", `${name(event.label)}${event.is_test ? " · TESZT" : ""} · ${event.zone}`);
+  text("spot-meta", `${clock(event.timestamp)} · ${Math.round(event.confidence * 100)}% biztos`);
+  text("spot-pill", state.pill); $("spot-pill").dataset.kind = state.kind;
+  $("spot-link").href = event.snapshot_url;
+  $("spot-link").target = "_blank"; $("spot-link").rel = "noopener";
+  $("spot-link").setAttribute("aria-label", `Snapshot: ${name(event.label)}, ${event.zone}`);
+  const src = event.thumbnail_url || event.snapshot_url;
+  if ($("spot-image").getAttribute("src") !== src) { $("spot-link").classList.remove("missing"); $("spot-image").src = src; }
+}
+
+const WATCHDOG = {ok: ["Figyel", "done"], warning: ["Figyelés", "go"], recovering: ["Helyreállítás", "go"], rebooting: ["Újraindítás", "go"], blocked: ["Letiltva", "warn"]};
+const ACTIONS = {"restart-source": "kameraforrás újraindítva", reboot: "Pi újraindítva", "dry-run": "próba"};
 function updateWatchdog(w) {
   const installed = Boolean(w?.installed);
   $("wd-toggle").hidden = !installed;
   if (!installed) {
-    text("wd-state", "Nincs telepítve"); tone("wd-state", "muted");
-    for (const id of ["wd-firmware", "wd-camera", "wd-checked", "wd-action", "wd-reboots"]) text(id, "—");
-    text("wd-message", ""); return;
+    text("wd-pill", "Nincs telepítve"); $("wd-pill").dataset.kind = "muted";
+    text("wd-message", "A helyreállító felügyelő nincs telepítve."); text("wd-reboots", "deploy/pi/install-host.sh");
+    for (const id of ["wd-firmware", "wd-camera", "wd-checked", "wd-action"]) { text(id, "—"); delete $(id).dataset.tone; }
+    return;
   }
-  const [label, stateTone] = w.stale ? ["⚠️ Nem jelentkezik", "danger"] : watchdogStates[w.state] || [w.state, "muted"];
-  text("wd-state", label); tone("wd-state", stateTone);
-  text("wd-firmware", w.firmware_ok ? "Rendben" : "Nem válaszol"); tone("wd-firmware", w.firmware_ok ? "positive" : "danger");
-  text("wd-camera", w.camera_ok ? "Van kép" : "Nincs kép"); tone("wd-camera", w.camera_ok ? "positive" : "danger");
-  text("wd-checked", date(w.updated_at));
-  text("wd-action", w.last_action ? `${watchdogActions[w.last_action.action] || w.last_action.action} · ${date(w.last_action.at)}` : "még nem volt");
-  text("wd-reboots", `${w.reboots_24h ?? 0} / 3`);
-  text("wd-message", w.state === "ok" && !w.stale ? "" : w.message || "");
+  const [label, kind] = w.stale ? ["Nem jelentkezik", "warn"] : WATCHDOG[w.state] || [w.state, "muted"];
+  text("wd-pill", label); $("wd-pill").dataset.kind = kind;
+  $("felugyelo").dataset.tone = kind === "done" ? "" : "danger";
+  text("wd-message", w.state === "ok" && !w.stale ? "Minden rendben" : w.message || "—");
+  text("wd-reboots", `Újraindítás 24 órán belül: ${w.reboots_24h ?? 0} / 3`);
+  text("wd-firmware", w.firmware_ok ? "Rendben" : "Nem válaszol"); $("wd-firmware").dataset.tone = w.firmware_ok ? "positive" : "danger";
+  text("wd-camera", w.camera_ok ? "Van kép" : "Nincs kép"); $("wd-camera").dataset.tone = w.camera_ok ? "positive" : "danger";
+  text("wd-checked", stamp(w.updated_at));
+  text("wd-action", w.last_action ? `${ACTIONS[w.last_action.action] || w.last_action.action} · ${stamp(w.last_action.at)}` : "még nem volt");
   watchdogAuto = w.auto_reboot !== false;
-  text("wd-toggle", `Automatikus újraindítás: ${watchdogAuto ? "be" : "ki"}`);
-  $("wd-toggle").setAttribute("aria-pressed", String(watchdogAuto));
+  $("wd-toggle").setAttribute("aria-checked", String(watchdogAuto));
 }
 async function toggleWatchdog() {
   $("wd-toggle").disabled = true;
   try {
-    const result = await fetch("/api/settings/watchdog", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({auto_reboot:!watchdogAuto}), signal:AbortSignal.timeout(10000)});
-    if (!result.ok) throw new Error("HTTP " + result.status);
-    watchdogAuto = (await result.json()).auto_reboot;
-    text("wd-toggle", `Automatikus újraindítás: ${watchdogAuto ? "be" : "ki"}`); $("wd-toggle").setAttribute("aria-pressed", String(watchdogAuto)); error("");
+    watchdogAuto = (await post("/api/settings/watchdog", {auto_reboot: !watchdogAuto})).auto_reboot;
+    $("wd-toggle").setAttribute("aria-checked", String(watchdogAuto)); error("");
   } catch { error("Nem sikerült menteni a helyreállítási beállítást. Próbáld újra."); }
   finally { $("wd-toggle").disabled = false; }
 }
-async function updateStatus() {
-  const s = await get("/api/status");
-  if (typeof s.rotation === "number" && s.rotation !== rotation) applyRotation(s.rotation);
-  if (Array.isArray(s.frame_size)) {
-    // Reported frames are already turned by the app; the embedded player shows the unturned stream.
-    const [width, height] = s.rotation % 180 ? [s.frame_size[1], s.frame_size[0]] : s.frame_size;
-    if (`${width}x${height}` !== streamSize) applyStreamSize(width, height);
+function updateHardware(h) {
+  $("hardver").hidden = isEvents || !h?.is_raspberry_pi;
+  if (!h?.is_raspberry_pi) return;
+  text("hw-model", h.model.replace(/^Raspberry Pi /, "Pi "));
+  const warnings = h.warnings || [];
+  $("hw-warning").hidden = !warnings.length;
+  text("hw-warning", warnings.join(" · "));
+  const speed = h.undervoltage ? "lassítva (gyenge táp)" : h.cpu_frequency_mhz ? `${Math.round(h.cpu_frequency_mhz)} MHz` : "—";
+  const gauges = [
+    ["CPU", h.cpu_percent, h.cpu_percent == null ? "…" : `${Math.round(h.cpu_percent)}%`, h.cpu_percent == null ? "Mérés…" : `${h.cpu_cores || "?"} mag · ${speed}`, h.cpu_percent >= 90],
+    ["Memória", h.memory?.used_percent, h.memory ? `${Math.round(h.memory.used_percent)}%` : "—", h.memory ? `${gib(h.memory.used_bytes)} / ${gib(h.memory.total_bytes)}` : "Nem elérhető", h.memory?.used_percent >= 90],
+    ["Tárhely", h.disk?.used_percent, h.disk ? `${Math.round(h.disk.used_percent)}%` : "—", h.disk ? `${gib(h.disk.free_bytes)} szabad / ${gib(h.disk.total_bytes)}` : "Nem elérhető", Boolean(h.disk && h.disk.free_bytes < h.disk.total_bytes * 0.1)],
+    ["Hőmérséklet", h.temperature_c == null ? null : h.temperature_c / 85 * 100, h.temperature_c == null ? "—" : `${Math.round(h.temperature_c)}°`, h.temperature_c == null ? "Nem elérhető" : h.temperature_c >= 75 ? "Magas" : "CPU, °C", h.temperature_c >= 75],
+  ].map(([label, value, shown, detail, danger]) => [label, Math.round(value ?? 0), shown, detail, danger]);
+  if (changed("gauges", gauges)) {
+    $("gauges").replaceChildren(...gauges.map(([label, value, shown, detail, danger]) => {
+      const item = node("li", "gauge"), ring = node("div", "gauge-ring"), body = node("div");
+      item.dataset.tone = danger ? "danger" : "";
+      ring.innerHTML = arc(31, 6, [{share: Math.min(100, value) / 100, color: danger ? "#ff8576" : "rgba(255,255,255,.88)"}]);
+      ring.append(node("strong", null, shown));
+      body.append(node("b", null, label), node("span", null, detail));
+      item.append(ring, body);
+      return item;
+    }));
   }
-  $("test-stream-banner").hidden = !s.source?.is_test;
-  updateHardware(s.hardware);
-  text("connection", s.camera === "connected" ? "Kamera online" : "Kamera offline");
-  $("connection").className = "connection " + (s.camera === "connected" ? "online" : "offline");
-  text("camera-state", s.camera === "connected" ? "Online" : "Újracsatlakozás…");
-  tone("camera-state", s.camera === "connected" ? "positive" : "danger");
-  text("motion-status", s.motion ? "Mozgás észlelve" : "Nincs aktív mozgás");
-  $("motion-status").classList.toggle("motion-active", Boolean(s.motion));
-  text("device", `${s.device} · ${s.ai}`); text("cpu", s.cpu || "—");
-  text("inference", s.ai_inference_ms === null ? "Várakozás mozgásra" : `${s.ai_inference_ms} ms`);
-  text("fps", `${s.camera_fps} / ${s.motion_fps}`); text("ai-fps", String(s.ai_fps)); text("latency", `${s.processing_latency_ms} ms`);
-  text("notifications", enabled(s.notifications_enabled)); text("backup", enabled(s.backup_enabled));
-  text("upload", s.backup_enabled ? (stateNames[s.upload_status] || s.upload_status) : "Kikapcsolva");
-  text("recording", enabled(s.record_events)); text("continuous", enabled(s.continuous_recording));
-  text("activity-analysis", enabled(s.activity_analysis_enabled));
-  for (const [id, active] of [["notifications", s.notifications_enabled], ["backup", s.backup_enabled], ["recording", s.record_events], ["continuous", s.continuous_recording], ["activity-analysis", s.activity_analysis_enabled]]) tone(id, active ? "positive" : "muted");
-  tone("upload", s.upload_status === "failed" && s.backup_enabled ? "danger" : s.backup_enabled ? "positive" : "muted");
-  text("retention", `${s.retention_days} nap`);
-  text("storage-status", s.storage_low ? "Kevés tárhely · mentés szünetel" : "Rendben");
-  tone("storage-status", s.storage_low ? "danger" : "positive");
-  updateWatchdog(s.watchdog);
-  const classes = JSON.stringify(s.tracked_objects || []);
-  if ($("filter").dataset.classes !== classes) {
-    const selection = $("filter").value;
-    $("filter").replaceChildren(new Option("Összes", ""), ...(s.tracked_objects || []).map(label => new Option(label, label)));
-    $("filter").value = (s.tracked_objects || []).includes(selection) ? selection : "";
-    $("filter").dataset.classes = classes;
-  }
-  text("last-detection", s.last_detection ? `AI: ${s.last_detection.label} · ${Math.round(s.last_detection.confidence * 100)}% · ${date(s.last_detection.timestamp)}` : "AI: még nincs találat");
-  text("latest-event", s.last_event ? `${s.last_event.label} · ${Math.round(s.last_event.confidence * 100)}% · ${s.last_event.zone} · ${date(s.last_event.timestamp)}${s.last_event.activity_summary ? ` · ${s.last_event.activity_summary}` : ""}` : "Még nem történt validált esemény.");
-  if (s.live_stream_url !== liveUrl) {
-    liveUrl = s.live_stream_url;
-    $("video-surface").querySelector("iframe")?.remove();
-    $("stream-empty").hidden = Boolean(liveUrl);
-    if (liveUrl) {
-      const frame = document.createElement("iframe"); frame.src = liveUrl; frame.title = "Élő kamera lejátszó";
-      frame.allow = "autoplay; fullscreen; picture-in-picture"; frame.referrerPolicy = "no-referrer"; frame.allowFullscreen = true;
-      $("video-surface").append(frame); text("live-label", "Webes lejátszó");
-    } else { text("live-label", "Nincs webes stream"); }
-  }
-  text("updated", `Frissítve: ${new Date().toLocaleTimeString("hu-HU")}`);
+  const minutes = Math.floor((h.uptime_seconds || 0) / 60);
+  const uptime = h.uptime_seconds == null ? "—" : `${minutes >= 1440 ? `${Math.floor(minutes / 1440)} n ` : ""}${Math.floor(minutes % 1440 / 60)} ó ${minutes % 60} p`;
+  const load = h.load_average ? h.load_average.map(v => v.toLocaleString("hu-HU", {minimumFractionDigits: 2, maximumFractionDigits: 2})).join(" / ") : "—";
+  text("hw-foot", `Terhelés (1 / 5 / 15 p): ${load} · üzemidő: ${uptime}`);
 }
-function node(tag, content, className) { const element = document.createElement(tag); if (content) element.textContent = content; if (className) element.className = className; return element; }
-let timelineSignature = null;
-let timelineTipTimer;
-function hideTimelineTip() { clearTimeout(timelineTipTimer); $("timeline-tooltip").hidden = true; }
-function scheduleTimelineTipHide() { clearTimeout(timelineTipTimer); timelineTipTimer = setTimeout(hideTimelineTip, 180); }
-function showTimelineTip(anchor, bucket) {
-  clearTimeout(timelineTipTimer);
-  const event = bucket.event, tip = $("timeline-tooltip");
-  const src = event.thumbnail_url || event.snapshot_url;
-  if ($("timeline-image").getAttribute("src") !== src) $("timeline-image").src = src;
-  $("timeline-image").alt = `${event.label} · ${event.zone}`;
-  text("timeline-label", `${event.label}${event.is_test ? " · TESZT" : ""} · ${Math.round(event.confidence * 100)}%`);
-  text("timeline-time", `${date(event.timestamp)} · ${bucket.count} esemény / 15 p`);
-  tip.hidden = false;
-  const r = anchor.getBoundingClientRect();
-  tip.style.left = `${Math.max(8, Math.min(innerWidth - 208, r.left + r.width / 2 - 100))}px`;
-  tip.style.top = `${r.top >= tip.offsetHeight + 12 ? r.top - tip.offsetHeight - 8 : Math.min(innerHeight - tip.offsetHeight - 8, r.bottom + 8)}px`;
+
+// --- selected day: overview donut, activity capsules, calendar --------------------------------------------------
+function dayLabel(day) {
+  if (sameDay(day, new Date())) return "Ma";
+  if (sameDay(day, addDays(new Date(), -1))) return "Tegnap";
+  return day.toLocaleDateString("hu-HU", {month: "long", day: "numeric"});
 }
-async function updateTimeline() {
-  if (isEvents) return;
-  const now = new Date(), start = new Date(now), end = new Date(now);
-  start.setHours(0, 0, 0, 0); end.setHours(24, 0, 0, 0);
-  const startSeconds = start.getTime() / 1000, endSeconds = end.getTime() / 1000;
-  const duration = endSeconds - startSeconds;
-  const data = await get(`/api/timeline?start=${startSeconds}&end=${endSeconds}`);
-  text("timeline-summary", `${now.toLocaleDateString("hu-HU", {month:"long", day:"numeric", weekday:"long"})} · ${data.total} esemény`);
-  $("timeline-now").style.left = `${(now.getTime() / 1000 - startSeconds) / duration * 100}%`;
-  $("timeline-empty").hidden = data.total !== 0;
-  const signature = JSON.stringify(data);
-  if (signature === timelineSignature) return;
-  hideTimelineTip();
-  const count = Math.ceil(duration / data.bucket_seconds);
-  const counts = new Map(data.buckets.map(b => [b.index, b.count]));
-  const peak = Math.max(1, ...counts.values());
-  const bins = document.createDocumentFragment(), ticks = document.createDocumentFragment(), axis = document.createDocumentFragment(), links = document.createDocumentFragment();
-  for (let i = 0; i < count; i++) {
-    const bin = node("span"); bin.style.height = `${(counts.get(i) || 0) / peak * 100}%`; bins.append(bin);
-  }
-  for (const bucket of data.buckets) {
-    const e = bucket.event, marker = node("a", null, "timeline-tick");
-    marker.href = e.snapshot_url; marker.target = "_blank"; marker.rel = "noopener";
-    marker.style.left = `${(new Date(e.timestamp).getTime() / 1000 - startSeconds) / duration * 100}%`;
-    marker.setAttribute("aria-label", `${date(e.timestamp)} · ${bucket.count} esemény ebben a 15 percben; legutóbbi: ${e.label}, ${Math.round(e.confidence * 100)}%. Snapshot megnyitása.`);
-    for (const type of ["mouseenter", "focus"]) marker.addEventListener(type, () => showTimelineTip(marker, bucket));
-    for (const type of ["mouseleave", "blur"]) marker.addEventListener(type, scheduleTimelineTipHide);
-    marker.addEventListener("keydown", event => { if (event.key === "Escape") hideTimelineTip(); });
-    ticks.append(marker);
-    const item = node("li"), link = node("a");
-    link.href = e.snapshot_url; link.target = "_blank"; link.rel = "noopener";
-    const time = new Date(e.timestamp).toLocaleTimeString("hu-HU", {hour:"2-digit", minute:"2-digit"});
-    link.append(node("strong", `${time} · ${e.label}${e.is_test ? " · TESZT" : ""}`), node("span", `${bucket.count} esemény · ${Math.round(e.confidence * 100)}% ↗`));
-    link.setAttribute("aria-label", marker.getAttribute("aria-label")); item.append(link); links.append(item);
-  }
-  for (let hour = 0; hour <= 24; hour += 3) {
-    const tickDate = new Date(start); tickDate.setHours(hour);
-    const label = node("span", String(hour).padStart(2, "0"));
-    label.style.left = `${(tickDate.getTime() / 1000 - startSeconds) / duration * 100}%`; axis.append(label);
-  }
-  $("timeline-bins").replaceChildren(bins); $("timeline-ticks").replaceChildren(ticks); $("timeline-axis").replaceChildren(axis);
-  $("timeline-links").replaceChildren(links); $("timeline-browse").hidden = !data.total;
-  text("timeline-browse-label", `Találatok böngészése · ${data.buckets.length} időszak`);
-  timelineSignature = signature;
+const range = (start, end) => `/api/timeline?start=${start.getTime() / 1000}&end=${end.getTime() / 1000}`;
+async function updateDay() {
+  // Browser-local midnights, so 23- and 25-hour DST days stay whole.
+  const start = selectedDay, end = addDays(start, 1), previous = addDays(start, -1);
+  const [day, before] = await Promise.all([get(range(start, end)), get(range(previous, start))]);
+  renderOverview(day.labels || {}, before.labels || {});
+  renderActivity(day, start, end);
+  renderCalendar();
 }
-window.addEventListener("scroll", hideTimelineTip, {passive:true});
-window.addEventListener("resize", hideTimelineTip);
-$("timeline-tooltip").addEventListener("mouseenter", () => clearTimeout(timelineTipTimer));
-$("timeline-tooltip").addEventListener("mouseleave", scheduleTimelineTipHide);
-document.addEventListener("keydown", event => { if (event.key === "Escape") hideTimelineTip(); });
-async function updateEvents() {
-  const filter = $("filter").value;
-  const data = await get(`/api/events?limit=${limit}&offset=${offset}` + (filter ? `&label=${encodeURIComponent(filter)}` : ""));
-  const signature = JSON.stringify([offset, filter, data.events]);
-  eventCount = data.events.length;
-  if (signature === eventsSignature) return;
-  const fragment = document.createDocumentFragment();
-  for (const event of data.events) {
-    const row = node("article", null, "event-row");
-    const thumbnail = node("a"); thumbnail.href = event.snapshot_url; thumbnail.target = "_blank"; thumbnail.rel = "noopener";
-    const image = node("img"); image.src = event.thumbnail_url || event.snapshot_url; image.loading = "lazy"; image.width = 132; image.height = 80; image.alt = `${event.label} a(z) ${event.zone} zónában`; thumbnail.append(image);
-    const body = node("div"); const heading = node("h2", `${event.label}${event.is_test ? " · TESZT" : ""}`); heading.append(node("span", `${Math.round(event.confidence * 100)}%`, "confidence"));
-    const notification = statusLine("p", stateIcons[event.notification_status], `Értesítés: ${stateNames[event.notification_status] || event.notification_status}`, "event-notification");
-    notification.dataset.tone = event.notification_status === "failed" ? "danger" : event.notification_status === "sent" ? "positive" : "muted";
-    body.append(heading, node("p", `${event.zone} · ${date(event.timestamp)}`), notification);
-    if (event.activity_status && event.activity_status !== "disabled") {
-      const states = {queued:"sorban", recording:"10 mp-es klip készül…", analyzing:"elemzés folyamatban…", failed:"nem sikerült", captured:"klip rögzítve, elemzés nélkül (csendes esemény)"};
-      const verdict = event.activity_verdict || Object.keys(verdictIcons).find(name => event.activity_summary?.startsWith(name));
-      const activityIcon = event.activity_status === "completed" ? verdictIcons[verdict] || "ℹ️" : stateIcons[event.activity_status];
-      body.append(statusLine("p", activityIcon, event.activity_summary ? `Videóelemzés: ${event.activity_summary}` : `Videóelemzés: ${states[event.activity_status] || event.activity_status}`, "event-activity"));
-      if (event.activity_notification_status && event.activity_notification_status !== "disabled") {
-        body.append(statusLine("p", stateIcons[event.activity_notification_status], `Elemzési értesítés: ${stateNames[event.activity_notification_status] || event.activity_notification_status}`, "event-notification"));
-      }
+function renderOverview(today, before) {
+  const labels = [...new Set([...tracked, ...Object.keys(today)])];
+  const total = labels.reduce((sum, label) => sum + (today[label] || 0), 0);
+  text("overview-day", dayLabel(selectedDay));
+  if (!changed("overview", [labels, today, before])) return;
+  const shown = labels.filter(label => today[label]);
+  const parts = shown.map(label => ({share: today[label] / total, color: COLORS[labels.indexOf(label) % COLORS.length], gap: shown.length > 1 ? 22 : 0}));
+  $("donut").innerHTML = arc(70, 18, parts);
+  const center = node("div", "donut-center");
+  center.append(node("strong", null, String(total)), node("span", null, "esemény"));
+  $("donut").append(center);
+  $("donut").setAttribute("aria-label", `${dayLabel(selectedDay)}: ${total} esemény. ` + labels.map(label => `${name(label)}: ${today[label] || 0}`).join(", "));
+  if (!labels.length) { $("legend").replaceChildren(node("li", "legend-empty", "Nincs követett objektum.")); return; }
+  $("legend").replaceChildren(...labels.map((label, index) => {
+    const item = node("li"), title = node("span", "name"), dot = node("i"), diff = (today[label] || 0) - (before[label] || 0);
+    dot.style.background = COLORS[index % COLORS.length];
+    title.append(dot, name(label));
+    const delta = node("span", "delta", diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : "±0");
+    delta.setAttribute("aria-label", `${diff >= 0 ? "+" : "−"}${Math.abs(diff)} az előző naphoz képest`);
+    item.append(title, node("strong", null, String(today[label] || 0)), delta);
+    return item;
+  }));
+}
+function renderActivity(timeline, start, end) {
+  const slots = Array.from({length: 8}, () => 0), slotSeconds = (end - start) / 8000;
+  for (const bucket of timeline.buckets) slots[Math.min(7, Math.floor(bucket.index * timeline.bucket_seconds / slotSeconds))] += bucket.count;
+  const peak = Math.max(1, ...slots), now = Date.now();
+  const current = now >= start.getTime() && now < end.getTime() ? Math.min(7, Math.floor((now - start.getTime()) / 1000 / slotSeconds)) : -1;
+  text("activity-meta", `${dayLabel(selectedDay)} · ${timeline.total} esemény`);
+  if (!changed("activity", [slots, current])) return;
+  $("bars").setAttribute("aria-label", `Események 3 órás szakaszokban, ${dayLabel(selectedDay).toLowerCase()}`);
+  $("bars").replaceChildren(...slots.map((count, index) => {
+    const item = node("li", "bar" + (index === current ? " now" : "")), track = node("div", "track");
+    const hours = `${String(index * 3).padStart(2, "0")}–${String(index * 3 + 3).padStart(2, "0")}`;
+    track.style.setProperty("--h", `${count ? Math.max(14, count / peak * 100) : 0}%`);
+    track.append(node("span", "fill"), node("span", "count", String(count)));
+    item.setAttribute("aria-label", `${hours} óra: ${count} esemény${index === current ? " (most)" : ""}`);
+    item.append(track, node("span", "slot", hours));
+    return item;
+  }));
+}
+function renderCalendar() {
+  const today = midnight(new Date()), monday = addDays(selectedDay, -((selectedDay.getDay() + 6) % 7));
+  const title = selectedDay.toLocaleDateString("hu-HU", {year: "numeric", month: "long"});
+  text("calendar-heading", title.charAt(0).toUpperCase() + title.slice(1));
+  $("week-next").disabled = addDays(monday, 7) > today;
+  if (!changed("calendar", [monday.getTime(), selectedDay.getTime(), today.getTime()])) return;
+  $("days").replaceChildren(...Array.from({length: 7}, (_, index) => {
+    const day = addDays(monday, index), button = node("button", "day" + (sameDay(day, today) ? " today" : ""));
+    button.type = "button";
+    button.disabled = day > today;
+    button.setAttribute("aria-pressed", String(sameDay(day, selectedDay)));
+    button.setAttribute("aria-label", day.toLocaleDateString("hu-HU", {month: "long", day: "numeric", weekday: "long"}));
+    button.append(node("small", null, DAY_NAMES[day.getDay()]), node("strong", null, String(day.getDate())));
+    button.addEventListener("click", () => selectDay(day));
+    return button;
+  }));
+}
+function selectDay(day) {
+  const today = midnight(new Date());
+  selectedDay = midnight(day > today ? today : day);
+  updateDay().catch(() => error("Nem sikerült betölteni a napot. Próbáld újra."));
+}
+
+// --- events ------------------------------------------------------------------------------------------------------
+function eventState(event) {
+  if (event.notification_status === "failed") return {pill: "Értesítés hiba", kind: "warn", ring: "done"};
+  if (event.label === "person" && event.activity_status && event.activity_status !== "disabled") {
+    const status = event.activity_status;
+    if (status === "completed") {
+      const suspicious = (event.activity_verdict || event.activity_summary || "").startsWith("Gyanús");
+      return {pill: suspicious ? "Gyanús" : "Nem gyanús", kind: suspicious ? "warn" : "done", ring: "done"};
     }
-    const actions = node("div", null, "event-actions"); const snapshot = node("a", "Snapshot ↗"); snapshot.href = event.snapshot_url; snapshot.target = "_blank"; snapshot.rel = "noopener"; actions.append(snapshot);
-    if (event.recording_url) { const video = node("a", "Videó ↗"); video.href = event.recording_url; video.target = "_blank"; video.rel = "noopener"; actions.append(video); }
-    if (event.montage_url) { const montage = node("a", "Montázs ↗"); montage.href = event.montage_url; montage.target = "_blank"; montage.rel = "noopener"; actions.append(montage); }
-    else if (event.montage_status === "recording") { actions.append(statusLine("span", stateIcons.recording, "Montázs: készül…")); }
-    if (event.activity_video_url) { const video = node("a", event.activity_clip_seconds > 10 ? `Elemzett klip (${event.activity_clip_seconds} mp) ↗` : "Elemzett klip ↗"); video.href = event.activity_video_url; video.target = "_blank"; video.rel = "noopener"; actions.append(video); }
-    else if (event.recording_status !== "disabled") { actions.append(statusLine("span", stateIcons[event.recording_status], `Klip: ${stateNames[event.recording_status] || event.recording_status}`)); }
-    row.append(thumbnail, body, actions); fragment.append(row);
+    if (status === "captured") return {pill: "Csendes", kind: "muted", ring: "done"};
+    if (status === "failed") return {pill: "Elemzés hiba", kind: "warn", ring: "done"};
+    return {pill: status === "recording" ? "Klip készül" : status === "analyzing" ? "Elemzés…" : "Sorban", kind: "go", ring: "spin"};
   }
-  if (!data.events.length) fragment.append(node("p", filter ? "Ehhez az objektumhoz még nincs esemény." : "Még nincs esemény. Mozgás és legalább két megerősített AI-találat után itt jelennek meg a snapshotok.", "empty"));
-  $("events-list").replaceChildren(fragment); eventCount = data.events.length;
-  eventsSignature = signature;
-  text("page-number", `${offset / limit + 1}. oldal`);
+  const states = {sent: ["Értesítve", "done", "done"], silent: ["Csendes", "muted", "done"], queued: ["Sorban", "go", "spin"], cooldown: ["Szünetel", "muted", "done"], disabled: ["Rögzítve", "muted", "done"]};
+  const [pill, kind, ring] = states[event.notification_status] || [event.notification_status, "muted", "done"];
+  return {pill, kind, ring};
 }
+function ringIcon(state) {
+  const wrap = node("span", "ring" + (state.ring === "spin" ? " spin" : ""));
+  wrap.setAttribute("aria-hidden", "true");
+  if (state.ring === "spin") wrap.innerHTML = arc(14, 3, [{share: 0.7, color: "#fff"}], "rgba(255,255,255,.14)");
+  else {
+    const color = state.kind === "warn" ? "#ff8576" : state.kind === "muted" ? "rgba(255,255,255,.5)" : "#fff";
+    wrap.innerHTML = `<svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="16" fill="rgba(255,255,255,.1)" stroke="none"/><path d="m11 17.5 4 4 8-8.5" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  return wrap;
+}
+function link(href, label) { const a = node("a", null, label); a.href = href; a.target = "_blank"; a.rel = "noopener"; return a; }
+function eventRow(event) {
+  const state = eventState(event), row = node("li", "event"), when = new Date(event.timestamp);
+  const thumb = link(event.snapshot_url, null);
+  thumb.className = "thumb";
+  thumb.setAttribute("aria-label", `Snapshot: ${name(event.label)}, ${event.zone}, ${stamp(event.timestamp)}`);
+  const image = node("img");
+  image.src = event.thumbnail_url || event.snapshot_url; image.alt = ""; image.width = 76; image.height = 57; image.loading = "lazy";
+  image.addEventListener("error", () => thumb.classList.add("missing"), {once: true});  // e.g. archived or lost in a crash
+  thumb.append(image);
+  const body = node("div"), heading = node("h3", null, name(event.label) + (event.is_test ? " · TESZT" : "") + " ");
+  heading.append(node("span", null, `· ${event.zone}`));
+  body.append(heading, node("p", null, `${sameDay(when, new Date()) ? clock(when) : stamp(when)} · ${Math.round(event.confidence * 100)}% biztos`));
+  if (event.activity_summary) body.append(node("p", "summary", event.activity_summary.split(" — ").slice(1).join(" — ") || event.activity_summary));
+  const end = node("div", "event-end"), links = node("div", "links");
+  if (event.montage_url) links.append(link(event.montage_url, "Montázs"));
+  else if (event.montage_status === "recording") links.append(node("span", null, "Montázs készül…"));
+  if (event.activity_video_url) links.append(link(event.activity_video_url, event.activity_clip_seconds > 10 ? `Klip (${event.activity_clip_seconds} mp)` : "Klip"));
+  if (event.recording_url) links.append(link(event.recording_url, "Videó"));
+  else if (event.recording_status === "recording") links.append(node("span", null, "Videó készül…"));
+  const pill = node("span", "pill", state.pill);
+  pill.dataset.kind = state.kind;
+  end.append(pill);
+  if (links.children.length) end.append(links);
+  row.append(ringIcon(state), thumb, body, end);
+  return row;
+}
+function renderEvents(target, events, emptyText) {
+  const fields = ["id", "activity_status", "notification_status", "montage_status", "recording_status", "activity_summary"];
+  if (!changed(target, events.map(event => fields.map(field => event[field])))) return;
+  $(target).replaceChildren(...(events.length ? events.map(eventRow) : [node("li", "empty", emptyText)]));
+}
+async function updateLatest() {
+  const data = await get("/api/events?limit=6");
+  renderEvents("latest", data.events, "Még nincs esemény. Mozgás és legalább két megerősített AI-találat után itt jelennek meg.");
+}
+function renderFilters() {
+  const options = [["", "Összes"], ...tracked.map(label => [label, name(label)])];
+  if (filter && !tracked.includes(filter)) filter = "";
+  $("filters").replaceChildren(...options.map(([value, label]) => {
+    const button = node("button", null, label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(value === filter));
+    button.addEventListener("click", () => {
+      filter = value; offset = 0;
+      for (const other of $("filters").children) other.setAttribute("aria-pressed", String(other === button));
+      refresh();
+    });
+    return button;
+  }));
+}
+async function updateEventsView() {
+  const data = await get(`/api/events?limit=${LIMIT}&offset=${offset}` + (filter ? `&label=${encodeURIComponent(filter)}` : ""));
+  renderEvents("event-list", data.events, filter ? "Ehhez az objektumhoz még nincs esemény." : "Még nincs esemény. Mozgás és legalább két megerősített AI-találat után itt jelennek meg.");
+  text("page-number", `${offset / LIMIT + 1}. oldal`);
+  $("previous").disabled = offset === 0;
+  $("next").disabled = data.events.length < LIMIT;
+}
+
+// --- page and refresh ---------------------------------------------------------------------------------------------
 async function refresh() {
   if (loading) return;
   loading = true;
-  for (const id of ["refresh", "filter", "previous", "next"]) $(id).disabled = true;
-  text("refresh", "Frissítés…");
-  try { await updateStatus(); await Promise.all([updateEvents(), updateTimeline()]); error(""); }
-  catch { error("Nem sikerült frissíteni. Ellenőrizd az alkalmazás kapcsolatát, majd próbáld újra."); }
-  finally {
-    loading = false; $("refresh").disabled = false; $("filter").disabled = false;
-    $("previous").disabled = offset === 0; $("next").disabled = eventCount < limit;
-    text("refresh", "Frissítés");
+  try {
+    const s = await get("/api/status");
+    $("test-banner").hidden = !s.source?.is_test;
+    if (JSON.stringify(s.tracked_objects) !== JSON.stringify(tracked)) { tracked = s.tracked_objects || []; renderFilters(); }
+    if (isEvents) await updateEventsView();
+    else {
+      updateLive(s); updateTiles(s); updateWatchdog(s.watchdog); updateIntegrations(s); updateHardware(s.hardware); updateSpotlight(s.last_event);
+      await Promise.all([updateLatest(), updateDay()]);
+    }
+    error("");
+  } catch {
+    error("Nem sikerült frissíteni. Ellenőrizd az alkalmazás kapcsolatát, majd próbáld újra.");
+  } finally {
+    loading = false;
   }
 }
-$("filter").addEventListener("change", () => { offset = 0; refresh(); }); $("refresh").addEventListener("click", refresh);
-$("previous").addEventListener("click", () => { offset = Math.max(0, offset - limit); refresh(); });
-$("next").addEventListener("click", () => { offset += limit; refresh(); });
+window.refresh = refresh;  // the standalone demo's simulated backend calls this when something happens
+
+$("dashboard").hidden = isEvents;
+$("events-view").hidden = !isEvents;
+if (isEvents) { text("title", "Eseménynapló"); document.title = "Camera Stack · Események"; }
+const home = document.querySelector('.dock a[data-nav="home"]');
+for (const item of document.querySelectorAll(".dock a")) {
+  if (item.dataset.nav === (isEvents ? "events" : "home")) item.setAttribute("aria-current", "page");
+  // Section shortcuts live on the overview; from the event log they open it at that card.
+  if (item.dataset.nav === "section") item.addEventListener("click", event => { if (isEvents) { event.preventDefault(); location.href = home.getAttribute("href") + item.getAttribute("href"); } });
+}
+$("spot-image").addEventListener("error", () => $("spot-link").classList.add("missing"));
 $("rotate").addEventListener("click", rotate);
 $("wd-toggle").addEventListener("click", toggleWatchdog);
-refresh(); setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+$("week-prev").addEventListener("click", () => selectDay(addDays(selectedDay, -7)));
+$("week-next").addEventListener("click", () => selectDay(addDays(selectedDay, 7)));
+$("previous").addEventListener("click", () => { offset = Math.max(0, offset - LIMIT); refresh(); });
+$("next").addEventListener("click", () => { offset += LIMIT; refresh(); });
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);

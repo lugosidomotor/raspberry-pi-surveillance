@@ -89,6 +89,16 @@ class EventStore:
             )
         return len(rows)
 
+    def fail_interrupted_montages(self):
+        """A montage episode lives in memory only; after a restart it can never complete."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT id FROM events WHERE json_extract(payload, '$.montage_status') = 'recording'"
+            ).fetchall()
+        for (event_id,) in rows:
+            self.update(event_id, montage_status="failed")
+        return len(rows)
+
     def list_events(self, limit=50, offset=0, label=None):
         with self.lock:
             if label:
@@ -118,6 +128,14 @@ class EventStore:
                 (start, start, start, start, end),
             ).fetchall()
         return [{"index": r["bucket"], "count": r["count"], "event": json.loads(r["payload"])} for r in rows]
+
+    def label_counts(self, start, end):
+        """Events per object label in [start, end): the day summary of the UI."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT label, COUNT(*) AS count FROM events WHERE epoch>=? AND epoch<? GROUP BY label", (start, end)
+            ).fetchall()
+        return {r["label"]: r["count"] for r in rows}
 
     def register_media(self, path: Path, kind: str):
         resolved = path.resolve()

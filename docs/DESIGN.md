@@ -1,143 +1,131 @@
 ---
 name: Camera Stack
-description: Simple camera monitoring interface with a live viewer, system readings, and event evidence.
+description: visionOS-style glass dashboard for a home camera: live view, day overview, events, recovery and hardware.
 colors:
-  bg: "#f3f5f6"
-  paper: "#fff"
-  ink: "#202f3c"
-  muted: "#596773"
-  line: "#dce2e6"
-  accent: "#176b68"
-  soft: "#e8f3f0"
-  danger: "#a33435"
-  viewer: "#17232b"
-  viewer-bar: "#24343e"
+  ink: "#fff"
+  muted: "rgba(255,255,255,.64)"
+  faint: "rgba(255,255,255,.42)"
+  glass: "rgba(255,255,255,.07)"
+  edge: "rgba(255,255,255,.09)"
+  lime: "#c9d236"
+  lime-ink: "#1e2306"
+  green: "#23824a"
+  coral: "#ff8576"
+  coral-bg: "#b93a2b"
+  series: ["#e8c31c", "#2aa6e3", "#9aa3ab", "#b48cf0", "#ff8576"]
 typography:
   body:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    fontFamily: '"Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
     fontSize: "16px"
-    fontWeight: 400
-  headline:
-    fontSize: "28px"
-    fontWeight: 650
-    letterSpacing: "-.025em"
-  title:
-    fontSize: "16px"
-    fontWeight: 650
+    fontVariantNumeric: tabular-nums
+  card-title:
+    fontSize: "21px"
+    fontWeight: 700
+  reading:
+    fontSize: "23px"
+    fontWeight: 700
   label:
     fontSize: "13px"
 rounded:
-  control: "6px"
-  radius: "12px"
+  window: "40px"
+  card: "26px"
+  inner: "18px"
+  pill: "999px"
 spacing:
-  small: "12px"
-  medium: "20px"
-  large: "28px"
-components:
-  button:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "10px 14px"
-  button-hover:
-    backgroundColor: "{colors.soft}"
-  select:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "10px 14px"
-  navigation:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.muted}"
-    height: "76px"
-  viewer:
-    backgroundColor: "{colors.viewer}"
-    rounded: "{rounded.radius}"
-  state-rail:
-    textColor: "{colors.ink}"
-    width: "290px"
-  event-row:
-    textColor: "{colors.ink}"
-    padding: "20px 0"
+  grid-gap: "22px"
+  card-padding: "22px 24px"
 ---
 
 # Design System: Camera Stack
 
 ## Overview
 
-A restrained utility interface: cool pale surfaces, slate text, teal interaction details, and a dark viewing area. The implementation is the visual authority; this document records the shipped plain HTML/CSS interface rather than proposing a new identity.
+A dark, visionOS-style glass dashboard, after the "LifeStats – Health Dashboard" shot
+by Sunny Rathod: translucent, strongly rounded panels float over an out-of-focus room
+(blue wall, warm floor, plants, a lamp), with a floating icon dock, capsule charts, a
+donut, a day strip, status pills and progress rings. Everything is on one overview
+page; `/events` is the full event log.
 
-Source: `app/static/style.css`, `app/static/index.html`, and `app/static/app.js`.
-Local review captures are not distributed with the repository because they
-may contain private camera footage or host data.
+Source: `app/static/index.html`, `app/static/style.css`, `app/static/app.js`. The
+standalone demo (`demo/camera-stack-demo.html`) is built from these same files.
 
-Test sources use a flat amber status band above the page content, with the
-explicit “TESZT STREAM” label and recorded-video context. It appears on both
-routes; source identity comes from the API rather than inferred connection
-state. Test events also retain a textual label in the event list.
-The intentional test-status palette is foreground `#624609`, surface
-`#fff3ce`, and outline `#cba24a`; it communicates simulation rather than
-connection failure and keeps the incumbent typography and spacing.
+## Surfaces
 
-## Colors
+- **Environment:** a fixed layer of radial and linear gradients with a vignette. It
+  exists to give the glass something to blur; it carries no information.
+- **Window:** one large panel (`rounded.window`) with a light-to-dark translucent
+  gradient, `backdrop-filter: blur(40px) saturate(150%)`, a hairline border and an
+  inner top highlight. There is no page header: the camera state sits on the live
+  view, so the first row of cards starts at the top of the window.
+- **Cards:** `glass` fill, `edge` border, `rounded.card`. Section titles without a
+  card (calendar, latest events) sit directly on the window.
+- **Dock:** a floating vertical pill left of the window (icons only; the label
+  appears on hover or focus). Under 760px it becomes a horizontal pill at the bottom
+  left. Items: overview, event log, and shortcuts to the hardware and recovery cards
+  (from the event log they open the overview at that card).
+- `prefers-reduced-transparency` switches the window, dock and cards to opaque
+  slate fills; blur is also the most expensive effect on weak devices.
 
-Primary: `accent` marks links, keyboard focus, active navigation, and confidence readings; `soft` provides button hover feedback. Neutrals: `bg` is the page canvas, `paper` the top bar and controls, `ink` primary text, `muted` secondary text, and `line` dividers. The viewer uses its own dark surface and bar. `danger` identifies an offline connection; connection text also names the state.
+## Colour and state
 
-## Typography
+White text on glass, `muted` for labels and `faint` for hints. Meaning is carried by
+pills and dots, always together with text:
 
-Use the system sans stack with tabular numerals for readings. Page headings use `headline`; section and event titles use `title`. Supporting descriptions are smaller than the base text, while readings and actions use the compact label scale. Paragraph line height is (1.6). Mobile page headings reduce to (25px); event section headings remain (22px).
+| Kind | Colour | Used for |
+|---|---|---|
+| go | lime pill, dark text | in progress: clip recording, analysis, queued, watchdog watching or recovering |
+| done | green pill, white text | finished well: not suspicious, notified, watchdog OK |
+| warn | coral pill, white text | needs attention: suspicious, failed, watchdog blocked or silent |
+| muted | translucent pill | silent (low-confidence) events, disabled functions |
+
+Coral text and dots mark offline camera, hung firmware, high temperature, low disk.
+The donut and legend use the `series` colours in the order of `AI_TRACK_OBJECTS`.
 
 ## Layout
 
-The centered main container has a maximum width of (1500px), horizontal padding of (4%), and top padding of (38px). Desktop pairs a flexible viewer with a state rail and a gap from the large spacing step. Below it, events form a divided list rather than a card grid.
+A 3-column grid (`1.55fr .8fr 1.2fr`, gap 22px) inside a 1320px window:
 
-At (1000px) and below the rail narrows to (240px) and the workstation gap becomes (22px). At (760px) and below the workstation stacks, navigation moves to a second header line, headings and their actions stack, and page gutters become (5%). Event rows switch from three columns to two: thumbnail and text, with evidence actions below the text. The absent-stream surface has a mobile minimum height of (270px); a configured player retains a (16:9) aspect ratio.
+1. **Live view** (4:3 or the stream's real ratio; rotation turns the player, 90/270
+   make it portrait), **metric tiles** (camera/motion FPS, AI time, CPU temperature,
+   free disk), **overview** donut of the selected day by label with the change
+   against the previous day.
+2. **Activity**: the selected day in eight 3-hour capsules, the current one lime;
+   **calendar** week strip (Monday first, future days disabled) that selects the
+   day for the donut and the capsules, and the **last hit** card.
+3. **Latest events** (6 rows: ring or check, thumbnail, label · zone, time and
+   confidence, analysis summary, status pill, montage/clip/video links or their
+   "készül…" state), beside the **recovery** card (state pill, message, reboots in
+   24 h, firmware, camera, last check and action, auto-reboot switch) and the
+   **integrations** card (notifications, cloud backup, upload, event clip, 24/7
+   recording, video analysis, backup state; retention in the header).
+4. **Raspberry Pi hardware**: four ring gauges (CPU, memory, disk, temperature
+   against 85 °C) with details, load and uptime in the footer. Only on a detected Pi.
 
-## Elevation & Depth
+Below 1240px the grid has two columns; below 980px one. Under 760px the window
+padding shrinks, tiles go 2×2, event rows put the pill and links under the text.
 
-No shadows. Separation comes from the pale canvas, white controls, fine dividers, and the dark viewer. Keep system readings directly on the page rather than adding nested containers.
+## Typography
 
-## Shapes
+Manrope (400–800), self-hosted in `app/static/fonts` under the SIL Open Font License,
+so the UI makes no third-party requests and looks the same offline; the system UI
+font is the fallback. Tabular numerals everywhere. Card titles 21px/700, readings
+23px/700 with a 14px muted unit, labels 13px.
 
-Use the control radius for buttons, the select, and thumbnails. The larger radius contains the viewer and closes the event empty state. Status dots are circular; borders and row separators are thin and understated.
+## Behaviour
 
-## Components
+- Refresh every 5 s while the page is visible. Each region re-renders only when its
+  data changed, so focus, hover and images survive refreshes.
+- Errors appear as a coral banner at the top of the window; the test source shows a
+  lime "TESZT STREAM" banner, and test events keep a "TESZT" label.
+- A missing thumbnail (archived, or lost in a crash) shows a "Nincs kép" placeholder.
+- Keyboard focus: 2px white outline, offset 3px. Touch targets are at least 44px
+  except the compact link chips (30px) inside event rows.
+- `prefers-reduced-motion` removes transitions and the progress-ring spin.
 
-- Buttons: white, outlined controls, including the link styled as a button. Minimum height (42px); hover uses `soft`, active uses a slightly deeper pale teal. Loading disables refresh, filter, and pagination together; disabled controls have half opacity. Background transition is (0.18s ease-out), removed when reduced motion is requested.
-- Object filter: a visibly labeled native select sharing button dimensions and shape. Retain the native interaction.
-- Navigation: two text links in a white header; the active route gains ink text, a stronger weight, and a teal underline. Connection state sits at the opposite end and wraps naturally on mobile.
-- Viewer: dark clipped surface with compact header and footer bars. The header carries a small outlined “↻ N°” rotate button; at 90°/270° the surface becomes a centered 9:16 portrait area. The actual player fills the image surface; otherwise a centered camera icon, explanation, and configuration hint appear.
-- State rail: grouped definition lists with muted labels, right-aligned readings, and horizontal dividers. Long values wrap; mobile readings have more available width.
-- Event row: a cropped evidence thumbnail, object label and confidence, timestamp and zone, then snapshot/video links or clip state. Empty results use one centered white message. Pagination remains a simple pair of buttons around the current page label.
+## Do and don't
 
-All interactive elements use a visible teal outline (3px), offset (4px), for keyboard focus. Request errors appear above the content in a pale red alert; event updates use a polite live region.
-
-## Do's and Don'ts
-
-### Interface refinement
-
-The existing light slate/teal identity remains unchanged. The navigation uses
-small, matching line icons and `aria-current` for the selected page. The camera
-brand mark sits on a flat teal-tinted surface. System readings are grouped in
-compact sections with 13px headings and 12px readings, rather than nested cards.
-Enabled integrations, online camera and healthy storage use teal text with a
-small dot; errors use the existing danger color. Disabled functions retain
-neutral text, and all states retain explicit labels.
-
-At widths up to 900px, the readings flow below the viewer in two columns;
-on narrow screens each label is above its reading. Event evidence links have
-44px minimum touch targets and confidence uses a small pale-teal badge.
-Event status lines (notification, video analysis, analysis notification, clip)
-start with an emoji for at-a-glance scanning: ✅ done or sent, ❌ failed,
-⏳ queued or in progress, ⏸️ cooldown, ➖ disabled; a completed analysis shows
-🛑 for „Gyanús” and ✅ for „Nem gyanús”, matching the ntfy titles. The emoji is
-`aria-hidden`; the text after it still names the state.
-Hardware bars animate their transform, not their layout width. Reduced-motion
-preferences disable transitions. Motion text inside the dark viewer uses
-`#c3eedc` and a `#99dfbe` dot when active, both intentionally light for contrast.
-The test-stream notice remains explicit and amber, in a compact 12px band.
-
-- Do preserve clear labels, tabular readings, and compact evidence rows.
-- Do retain the single-column mobile flow and visible keyboard focus.
-- Don't add decorative shadows, gradients, or nested cards to this simple interface.
-- Don't replace missing stream or empty event states with invented camera imagery or detection history.
+- Do keep every state readable as text; colour only reinforces it.
+- Do keep the camera state on the live view instead of reintroducing a page header.
+- Don't invent data: empty days show zero capsules and an empty donut, a missing
+  stream shows the configuration hint, not an image.
+- Don't load fonts, icons or scripts from third parties; the UI is host-local.

@@ -107,7 +107,7 @@ A méretoptimalizálás részletei: [Docker image és tárhely](docs/DOCKER_SIZE
 │   ├── runtime.py         # Pipeline és worker életciklus
 │   ├── web.py             # FastAPI web/API
 │   ├── utils.py           # Logging, állapot, worker segédek
-│   └── static/            # HTML, CSS, JS, ikon
+│   └── static/            # HTML, CSS, JS, ikon, Manrope betűtípus (OFL)
 ├── tests/                 # Kamera nélkül futó unit tesztek
 ├── deploy/pi/             # Host CSI adapter + MediaMTX config
 ├── demo/                  # Önálló, böngészőben futó demó (generált, egy fájl)
@@ -494,7 +494,7 @@ elkülönül a Dockeres AI alkalmazástól.
 Részletek: [docs/TESTING.md](docs/TESTING.md). GitHub Actions ugyanezeket a
 Dockeres unit teszteket futtatja; nem használ élő kamerát vagy valódi titkot.
 UI-dokumentáció: [docs/DESIGN.md](docs/DESIGN.md),
-[docs/HARDWARE_UI.md](docs/HARDWARE_UI.md).
+[docs/ui-timeline.md](docs/ui-timeline.md), [docs/HARDWARE_UI.md](docs/HARDWARE_UI.md).
 
 ## Hibakeresés és üzemeltetés
 

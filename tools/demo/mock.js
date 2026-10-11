@@ -653,8 +653,9 @@ function timeline(params, now) {
     const index = Math.floor((r.t / 1000 - start) / 900), bucket = buckets.get(index);
     if (bucket) bucket.count++; else buckets.set(index, {index, count: 1, event: publicEvent(r, now)});  // newest first
   }
-  const list = [...buckets.values()].sort((a, b) => a.index - b.index);
-  return [200, {start, end, bucket_seconds: 900, total: list.reduce((sum, b) => sum + b.count, 0), buckets: list}];
+  const list = [...buckets.values()].sort((a, b) => a.index - b.index), labels = {};
+  for (const r of sim.records) if (r.t >= start * 1000 && r.t < end * 1000) labels[r.label] = (labels[r.label] || 0) + 1;
+  return [200, {start, end, bucket_seconds: 900, total: list.reduce((sum, b) => sum + b.count, 0), labels, buckets: list}];
 }
 function respond(code, body) {
   return new Response(JSON.stringify(body), {status: code, headers: {"Content-Type": "application/json"}});
